@@ -31,7 +31,7 @@ class HotkeySettings:
 @dataclass
 class TranscriptionSettings:
     model: str = "small"
-    language: str = "auto"
+    language: str = "de"
     fallback_language: str = "de"
 
 

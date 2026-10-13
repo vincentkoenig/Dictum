@@ -18,8 +18,11 @@ hold_threshold = 0.4
 # Größer = genauer, aber langsamer. "small" ist auf der CPU ein guter Kompromiss.
 model = "small"
 
-# "auto" = Sprache automatisch erkennen, sonst fester Code wie "de" oder "en"
-language = "auto"
+# Fester Sprachcode wie "de" oder "en", oder "auto" = automatisch erkennen.
+# "auto" kostet pro Diktat ca. 1,5–2 s extra (Whisper analysiert dafür ein volles
+# 30-s-Fenster). Englische Begriffe in deutschen Sätzen klappen auch mit "de".
+# Im Tray-Menü jederzeit umschaltbar.
+language = "de"
 
 # Fällt die automatische Erkennung unsicher aus, wird diese Sprache genommen
 fallback_language = "de"
