@@ -56,6 +56,12 @@ class CleanupSettings:
 
 
 @dataclass
+class CloudSettings:
+    url: str = ""
+    publishable_key: str = ""
+
+
+@dataclass
 class FeedbackSettings:
     sounds: bool = True
 
@@ -65,6 +71,7 @@ class Settings:
     hotkey: HotkeySettings = field(default_factory=HotkeySettings)
     transcription: TranscriptionSettings = field(default_factory=TranscriptionSettings)
     cleanup: CleanupSettings = field(default_factory=CleanupSettings)
+    cloud: CloudSettings = field(default_factory=CloudSettings)
     feedback: FeedbackSettings = field(default_factory=FeedbackSettings)
 
 
@@ -79,6 +86,7 @@ def load_settings(path: Path = DEFAULT_PATH) -> Settings:
         hotkey=HotkeySettings(**data.get("hotkey", {})),
         transcription=TranscriptionSettings(**data.get("transcription", {})),
         cleanup=CleanupSettings(**data.get("cleanup", {})),
+        cloud=CloudSettings(**data.get("cloud", {})),
         feedback=FeedbackSettings(**data.get("feedback", {})),
     )
     _validate(settings)

@@ -52,6 +52,13 @@ provider = "anthropic"
 anthropic_model = "claude-haiku-5-5"
 openai_model = "gpt-5-mini"
 
+[cloud]
+# Das Supabase-Projekt. Beides ist öffentlich und darf im Repo stehen: Der
+# "publishable key" erlaubt nichts ohne Login, die Datenbank schützt sich per RLS.
+# Login-Daten (E-Mail/Passwort) stehen dagegen in der .env.
+url = "https://wmbafxknzbaogemacvdb.supabase.co"
+publishable_key = "sb_publishable_kbWytftMtnkxLDoUZXYQwQ_T53gIvY_"
+
 [feedback]
 # Kurzer Piepton bei Start und Stopp der Aufnahme
 sounds = true
