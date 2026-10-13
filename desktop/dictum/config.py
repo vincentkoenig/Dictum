@@ -17,13 +17,17 @@ from pathlib import Path
 # settings.toml liegt im Ordner desktop/, also eine Ebene über diesem Paket
 DEFAULT_PATH = Path(__file__).resolve().parent.parent / "settings.toml"
 
-VALID_KEYS = {"ctrl", "win", "alt", "shift"}
+VALID_KEYS = {
+    "ctrl", "win", "alt", "shift",                      # linke ODER rechte Taste
+    "ctrl_l", "ctrl_r", "alt_l", "shift_l", "shift_r",  # genau eine Seite
+    *(f"f{n}" for n in range(1, 13)),                   # F1 … F12
+}
 VALID_MODES = {"both", "hold", "toggle"}
 
 
 @dataclass
 class HotkeySettings:
-    keys: list[str] = field(default_factory=lambda: ["ctrl", "win"])
+    keys: list[str] = field(default_factory=lambda: ["ctrl_r"])
     mode: str = "both"
     hold_threshold: float = 0.4
 

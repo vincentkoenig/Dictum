@@ -24,15 +24,13 @@ import numpy as np
 
 from .audio import Recorder
 from .config import Settings
-from .hotkey import HotkeyListener, HotkeyStateMachine
+from .hotkey import HotkeyListener, HotkeyStateMachine, hotkey_label
 from .inserter import insert_text
 from .overlay import Overlay
 from .transcriber import Transcriber
 from .tray import Tray
 
 log = logging.getLogger(__name__)
-
-KEY_LABELS = {"ctrl": "Strg", "win": "Win", "alt": "Alt", "shift": "Umschalt"}
 
 
 class DictumApp:
@@ -53,9 +51,8 @@ class DictumApp:
             hold_threshold=settings.hotkey.hold_threshold,
         )
         self.listener = HotkeyListener(settings.hotkey.keys, self.machine)
-        hotkey_label = "+".join(KEY_LABELS[k] for k in settings.hotkey.keys)
         self.tray = Tray(
-            hotkey_label,
+            hotkey_label(settings.hotkey.keys),
             get_mode=lambda: self.machine.mode,
             set_mode=self._set_mode,
             get_language=lambda: self.transcriber.language,

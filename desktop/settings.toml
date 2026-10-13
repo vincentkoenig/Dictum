@@ -2,8 +2,13 @@
 # Änderungen werden beim nächsten Start übernommen.
 
 [hotkey]
-# Tasten, die gemeinsam gedrückt werden. Möglich: "ctrl", "win", "alt", "shift"
-keys = ["ctrl", "win"]
+# Taste(n), die gedrückt werden. Mehrere = gemeinsam drücken, z. B. ["win", "alt"].
+#   Gruppen (links oder rechts): "ctrl", "win", "alt", "shift"
+#   Genau eine Seite:            "ctrl_l", "ctrl_r", "alt_l", "shift_l", "shift_r"
+#   Funktionstasten:             "f1" … "f12"
+# Nicht empfohlen: "ctrl"+"alt" (= AltGr, z. B. für @ und €), "ctrl"+"shift"
+# (wechselt oft das Tastaturlayout), "alt_r" (ist AltGr auf deutschen Tastaturen).
+keys = ["ctrl_r"]
 
 # "both"   = halten zum Sprechen ODER kurz antippen für Start/Stopp (empfohlen)
 # "hold"   = nur halten (Push-to-talk)

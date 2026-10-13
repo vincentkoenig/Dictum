@@ -1,6 +1,8 @@
 """Testet die Hotkey-Logik ohne echte Tastatur – die Zeit wird einfach vorgegeben."""
 
-from dictum.hotkey import HotkeyStateMachine, State
+from pynput.keyboard import Key
+
+from dictum.hotkey import HotkeyListener, HotkeyStateMachine, State, hotkey_label
 
 
 def make(mode="both"):
@@ -39,7 +41,7 @@ def test_antippen_laesst_aufnahme_weiterlaufen_bis_zum_zweiten_antippen():
 def test_andere_taste_waehrend_halten_verwirft_aufnahme():
     sm, ev = make()
     sm.combo_down(0.0)
-    sm.other_key()  # z. B. Strg+Win+D
+    sm.other_key()  # z. B. C – man wollte eigentlich Strg+C drücken
     sm.combo_up(0.5)
     assert ev == ["start", "cancel"]
     assert sm.state == State.IDLE
@@ -66,3 +68,34 @@ def test_modus_toggle_wartet_auch_bei_langem_druck():
     sm.combo_down(0.0)
     sm.combo_up(3.0)
     assert sm.state == State.TOGGLED
+
+
+# --- Tastenzuordnung (echte pynput-Tasten → Namen aus settings.toml) ---------------
+
+
+def test_strg_rechts_loest_aus_strg_links_nicht():
+    listener = HotkeyListener(["ctrl_r"], make()[0])
+    assert listener.name_for(Key.ctrl_r) == "ctrl_r"
+    assert listener.name_for(Key.ctrl_l) is None  # z. B. Strg+C bleibt unberührt
+
+
+def test_gruppe_ctrl_meint_beide_seiten():
+    listener = HotkeyListener(["ctrl", "win"], make()[0])
+    assert listener.name_for(Key.ctrl_l) == "ctrl"
+    assert listener.name_for(Key.ctrl_r) == "ctrl"
+    assert listener.name_for(Key.cmd) == "win"
+
+
+def test_strg_rechts_halten_ueber_den_listener():
+    sm, ev = make()
+    listener = HotkeyListener(["ctrl_r"], sm)
+    listener._on_press(Key.ctrl_r)
+    listener._on_press(Key.ctrl_r)  # automatische Tastenwiederholung beim Halten
+    assert ev == ["start"]
+    listener._on_release(Key.ctrl_r)
+    assert sm.state in (State.IDLE, State.TOGGLED)
+
+
+def test_lesbarer_name_fuer_das_tray():
+    assert hotkey_label(["ctrl_r"]) == "Strg rechts"
+    assert hotkey_label(["win", "alt"]) == "Win+Alt"

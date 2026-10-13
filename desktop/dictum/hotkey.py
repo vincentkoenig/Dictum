@@ -18,8 +18,8 @@ Die Zustände:
                                                                 │
     IDLE ◄──losgelassen── WAIT_RELEASE ◄──Kombi erneut gedrückt (stop)┘
 
-Wird während PRESSED eine andere Taste gedrückt (z. B. Strg+Win+D für einen neuen
-Desktop), war das kein Diktat → Aufnahme wird verworfen (cancel).
+Wird während PRESSED eine andere Taste gedrückt (z. B. C, weil man mit der rechten
+Strg-Taste Strg+C drücken wollte), war das kein Diktat → Aufnahme wird verworfen (cancel).
 """
 
 from __future__ import annotations
@@ -95,13 +95,35 @@ class HotkeyStateMachine:
 
 # --- Verbindung zur echten Tastatur -------------------------------------------------
 
-# pynput unterscheidet linke/rechte Tasten. Wir fassen sie zu einem Namen zusammen.
-_KEY_GROUPS: dict[str, set] = {
-    "ctrl": {keyboard.Key.ctrl, keyboard.Key.ctrl_l, keyboard.Key.ctrl_r},
-    "win": {keyboard.Key.cmd, keyboard.Key.cmd_l, keyboard.Key.cmd_r},
-    "alt": {keyboard.Key.alt, keyboard.Key.alt_l, keyboard.Key.alt_r, keyboard.Key.alt_gr},
-    "shift": {keyboard.Key.shift, keyboard.Key.shift_l, keyboard.Key.shift_r},
+# Welche echten Tasten hinter einem Namen aus settings.toml stehen.
+# - Gruppen ("ctrl") meinen die linke ODER rechte Taste.
+# - Einzeltasten ("ctrl_r") meinen genau eine Seite. Praktisch, weil z. B. die rechte
+#   Strg-Taste im Alltag kaum benutzt wird und sich gut als Ein-Tasten-Hotkey eignet.
+K = keyboard.Key
+KEY_MAP: dict[str, set] = {
+    "ctrl": {K.ctrl, K.ctrl_l, K.ctrl_r},
+    "win": {K.cmd, K.cmd_l, K.cmd_r},
+    "alt": {K.alt, K.alt_l, K.alt_r, K.alt_gr},
+    "shift": {K.shift, K.shift_l, K.shift_r},
+    "ctrl_l": {K.ctrl_l},
+    "ctrl_r": {K.ctrl_r},
+    "alt_l": {K.alt_l},
+    "shift_l": {K.shift_l},
+    "shift_r": {K.shift_r},
+    **{f"f{n}": {getattr(K, f"f{n}")} for n in range(1, 13)},
 }
+
+# Für Tray-Tooltip und Menü
+KEY_LABELS: dict[str, str] = {
+    "ctrl": "Strg", "win": "Win", "alt": "Alt", "shift": "Umschalt",
+    "ctrl_l": "Strg links", "ctrl_r": "Strg rechts", "alt_l": "Alt links",
+    "shift_l": "Umschalt links", "shift_r": "Umschalt rechts",
+    **{f"f{n}": f"F{n}" for n in range(1, 13)},
+}
+
+
+def hotkey_label(keys: list[str]) -> str:
+    return "+".join(KEY_LABELS[k] for k in keys)
 
 # Eine Taste, die es auf keiner Tastatur gibt. Wir "drücken" sie, während die
 # Win-Taste gehalten wird. Sonst denkt Windows beim Loslassen, Win wurde allein
@@ -109,18 +131,11 @@ _KEY_GROUPS: dict[str, set] = {
 _MASK_KEY = keyboard.KeyCode.from_vk(0xE8)
 
 
-def _group_of(key) -> str | None:
-    for name, members in _KEY_GROUPS.items():
-        if key in members:
-            return name
-    return None
-
-
 class HotkeyListener:
     def __init__(self, keys: list[str], machine: HotkeyStateMachine) -> None:
         self.keys = set(keys)
         self.machine = machine
-        self._down: set[str] = set()  # welche Gruppen gerade gedrückt sind
+        self._down: set[str] = set()  # welche Hotkey-Tasten gerade gedrückt sind
         self._combo_active = False
         self._controller = keyboard.Controller()
         self._listener = keyboard.Listener(on_press=self._on_press, on_release=self._on_release)
@@ -131,15 +146,24 @@ class HotkeyListener:
     def stop(self) -> None:
         self._listener.stop()
 
+    def name_for(self, key) -> str | None:
+        """Zu welcher Hotkey-Taste gehört diese echte Taste? None = gehört nicht dazu."""
+        for name in self.keys:
+            if key in KEY_MAP[name]:
+                return name
+        return None
+
     def _on_press(self, key) -> None:
         if key == _MASK_KEY:
             return  # unser eigener Trick-Tastendruck
-        group = _group_of(key)
-        if group is None or group not in self.keys:
+        name = self.name_for(key)
+        if name is None:
             # Eine "fremde" Taste: Teil einer anderen Tastenkombination
             self.machine.other_key()
             return
-        self._down.add(group)
+        self._down.add(name)
+        # _combo_active verhindert, dass die automatische Tastenwiederholung beim
+        # Gedrückthalten immer wieder neue Aufnahmen startet
         if not self._combo_active and self._down == self.keys:
             self._combo_active = True
             if "win" in self.keys:
@@ -147,10 +171,10 @@ class HotkeyListener:
             self.machine.combo_down(time.monotonic())
 
     def _on_release(self, key) -> None:
-        group = _group_of(key)
-        if group is None:
+        name = self.name_for(key)
+        if name is None:
             return
-        self._down.discard(group)
-        if self._combo_active and group in self.keys:
+        self._down.discard(name)
+        if self._combo_active:
             self._combo_active = False
             self.machine.combo_up(time.monotonic())
