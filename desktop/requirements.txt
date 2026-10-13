@@ -1,0 +1,11 @@
+# Laufzeit-Abhängigkeiten der Desktop-App
+faster-whisper>=1.1      # Spracherkennung (Whisper-Nachbau, schnell auf der CPU)
+sounddevice>=0.5         # Mikrofon auslesen
+numpy>=1.26              # Audio als Zahlen-Array
+pynput>=1.7              # globale Hotkeys + Tastendruck simulieren (Strg+V)
+pyperclip>=1.9           # Zwischenablage lesen/schreiben
+pystray>=0.19            # Tray-Icon in der Taskleiste
+pillow>=10               # Bild für das Tray-Icon zeichnen
+
+# Nur für die Entwicklung
+pytest>=8

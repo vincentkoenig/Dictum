@@ -1,0 +1,10 @@
+[project]
+name = "dictum-desktop"
+version = "0.1.0"
+description = "Diktieren per Hotkey in jedes Textfeld"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+# Damit die Tests das Paket "dictum" ohne Installation finden
+pythonpath = ["."]
+testpaths = ["tests"]

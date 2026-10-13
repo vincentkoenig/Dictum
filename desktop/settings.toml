@@ -1,0 +1,29 @@
+# Einstellungen der Dictum-Desktop-App.
+# Änderungen werden beim nächsten Start übernommen.
+
+[hotkey]
+# Tasten, die gemeinsam gedrückt werden. Möglich: "ctrl", "win", "alt", "shift"
+keys = ["ctrl", "win"]
+
+# "both"   = halten zum Sprechen ODER kurz antippen für Start/Stopp (empfohlen)
+# "hold"   = nur halten (Push-to-talk)
+# "toggle" = nur antippen (Start/Stopp)
+mode = "both"
+
+# Ab wie vielen Sekunden Drücken gilt es als "Halten" statt "Antippen"
+hold_threshold = 0.4
+
+[transcription]
+# Whisper-Modellgröße: "tiny", "base", "small", "medium", "large-v3-turbo"
+# Größer = genauer, aber langsamer. "small" ist auf der CPU ein guter Kompromiss.
+model = "small"
+
+# "auto" = Sprache automatisch erkennen, sonst fester Code wie "de" oder "en"
+language = "auto"
+
+# Fällt die automatische Erkennung unsicher aus, wird diese Sprache genommen
+fallback_language = "de"
+
+[feedback]
+# Kurzer Piepton bei Start und Stopp der Aufnahme
+sounds = true
