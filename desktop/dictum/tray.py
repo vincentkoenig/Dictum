@@ -2,25 +2,40 @@
 
 `pystray` zeichnet das Symbol und das Rechtsklick-Menü. Das Bild erzeugen wir mit
 Pillow direkt im Code (ein stilisiertes Mikrofon), so braucht es keine Bilddatei.
+
+Das Menü liest und ändert Einstellungen direkt an der App (`app.get(...)`,
+`app.set(...)`). pystray fragt `checked` bei jedem Öffnen des Menüs neu ab – so zeigen
+die Häkchen immer den aktuellen Stand.
 """
 
 from __future__ import annotations
 
-from typing import Callable
+from typing import TYPE_CHECKING
 
 import pystray
 from PIL import Image, ImageDraw
 
+if TYPE_CHECKING:  # nur für die Typprüfung, verhindert einen Import-Kreis
+    from .app import DictumApp
+
+# Jede Option: interner Wert → Beschriftung im Menü
 MODE_LABELS = {
     "both": "Halten oder Antippen",
     "hold": "Nur Halten",
     "toggle": "Nur Antippen",
 }
-
 LANGUAGE_LABELS = {
     "de": "Deutsch",
     "en": "Englisch",
     "auto": "Automatisch (langsamer)",
+}
+ENGINE_LABELS = {
+    "local": "Lokal (privat, kostenlos)",
+    "openai": "OpenAI-Cloud (schneller)",
+}
+PROVIDER_LABELS = {
+    "anthropic": "Claude",
+    "openai": "OpenAI",
 }
 
 
@@ -38,35 +53,37 @@ def _draw_icon() -> Image.Image:
 
 
 class Tray:
-    def __init__(
-        self,
-        hotkey_label: str,
-        get_mode: Callable[[], str],
-        set_mode: Callable[[str], None],
-        get_language: Callable[[], str],
-        set_language: Callable[[str], None],
-        on_quit: Callable[[], None],
-    ) -> None:
-        def radio_item(label: str, value: str, get, set_) -> pystray.MenuItem:
-            # Eine eigene Funktion pro Eintrag "merkt" sich ihren Wert. Lambdas direkt in
-            # der Schleife würden am Ende alle auf den letzten Wert zeigen.
-            return pystray.MenuItem(
-                label,
-                lambda: set_(value),
-                checked=lambda _item: get() == value,
-                radio=True,
-            )
-
-        modes = [radio_item(l, v, get_mode, set_mode) for v, l in MODE_LABELS.items()]
-        langs = [radio_item(l, v, get_language, set_language) for v, l in LANGUAGE_LABELS.items()]
+    def __init__(self, app: DictumApp, hotkey_label: str) -> None:
+        def radio_menu(setting: str, labels: dict[str, str]) -> pystray.Menu:
+            """Untermenü mit Auswahlpunkten für eine Einstellung."""
+            def item(value: str, label: str) -> pystray.MenuItem:
+                # Eigene Funktion pro Eintrag, damit sich jeder Eintrag "seinen" Wert merkt.
+                # Lambdas direkt in einer Schleife würden alle auf den letzten Wert zeigen.
+                return pystray.MenuItem(
+                    label,
+                    lambda: app.set(setting, value),
+                    checked=lambda _item: app.get(setting) == value,
+                    radio=True,
+                )
+            return pystray.Menu(*(item(v, l) for v, l in labels.items()))
 
         menu = pystray.Menu(
             pystray.MenuItem(f"Dictum – {hotkey_label}", None, enabled=False),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem("Modus", pystray.Menu(*modes)),
-            pystray.MenuItem("Sprache", pystray.Menu(*langs)),
+            pystray.MenuItem(
+                "KI-Bereinigung",
+                lambda: app.set("cleanup", not app.get("cleanup")),
+                checked=lambda _item: app.get("cleanup"),
+            ),
+            pystray.MenuItem("KI-Anbieter", radio_menu("provider", PROVIDER_LABELS)),
+            pystray.MenuItem("Spracherkennung", radio_menu("engine", ENGINE_LABELS)),
+            pystray.MenuItem("Sprache", radio_menu("language", LANGUAGE_LABELS)),
+            pystray.MenuItem("Modus", radio_menu("mode", MODE_LABELS)),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem("Beenden", lambda: on_quit()),
+            pystray.MenuItem("Wörterbuch bearbeiten", lambda: app.open_dictionary()),
+            pystray.MenuItem("Snippets bearbeiten", lambda: app.open_snippets()),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem("Beenden", lambda: app.quit()),
         )
         self.icon = pystray.Icon("dictum", _draw_icon(), f"Dictum ({hotkey_label})", menu)
 

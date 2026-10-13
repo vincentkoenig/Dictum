@@ -58,6 +58,7 @@ STATES = {
     "loading": ("◌", "#9aa0a6", "Lade Modell …"),
     "listening": ("●", "#ff4d4f", "Hört zu …"),
     "transcribing": ("◐", "#4c9ffe", "Transkribiert …"),
+    "polishing": ("✦", "#b48cff", "Formuliert …"),
 }
 
 
