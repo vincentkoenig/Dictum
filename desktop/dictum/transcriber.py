@@ -32,11 +32,15 @@ MIN_LANGUAGE_PROBABILITY = 0.5
 MIN_AUDIO_SECONDS = 0.3
 
 
-class Transcriber:
+class LocalTranscriber:
+    name = "local"
+
     def __init__(self, model_size: str, language: str = "auto", fallback_language: str = "de"):
         self.model_size = model_size
         self.language = language
         self.fallback_language = fallback_language
+        # Begriffe aus dem persönlichen Wörterbuch (siehe vocabulary.py)
+        self.vocabulary: list[str] = []
         self._model: WhisperModel | None = None
         self._ready = threading.Event()
 
@@ -65,6 +69,10 @@ class Transcriber:
             vad_filter=True,
             # Kurze Diktate sind eigenständig – Vorgängertext würde nur Fehler mitschleppen
             condition_on_previous_text=False,
+            # Der "initial_prompt" ist Text, den Whisper so behandelt, als wäre er kurz
+            # vorher gesagt worden. Stehen dort unsere Fachbegriffe, schreibt Whisper
+            # ähnlich klingende Wörter eher genau so.
+            initial_prompt=", ".join(self.vocabulary) + "." if self.vocabulary else None,
         )
         # `segments` ist ein Generator: die eigentliche Arbeit passiert erst beim Durchlaufen
         text = " ".join(seg.text.strip() for seg in segments).strip()

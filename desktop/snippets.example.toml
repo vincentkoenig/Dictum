@@ -1,0 +1,20 @@
+# Snippets: Sagst du GENAU den Auslöser (und sonst nichts), wird stattdessen
+# der hinterlegte Text eingefügt. Groß-/Kleinschreibung und Satzzeichen egal.
+#
+# Diese Datei wird beim ersten Start nach "snippets.toml" kopiert –
+# bearbeite snippets.toml (Tray-Menü → "Snippets bearbeiten").
+
+[[snippet]]
+trigger = "meine E-Mail"
+text = "max.mustermann@example.com"
+
+[[snippet]]
+trigger = "meine Adresse"
+text = """Max Mustermann
+Musterstraße 1
+12345 Musterstadt"""
+
+[[snippet]]
+trigger = "freundliche Grüße"
+text = """Mit freundlichen Grüßen
+Max Mustermann"""

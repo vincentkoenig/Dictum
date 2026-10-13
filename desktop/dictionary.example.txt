@@ -1,0 +1,11 @@
+# Persönliches Wörterbuch für Dictum
+# Ein Begriff pro Zeile: Namen, Firmen, Fachbegriffe, Abkürzungen.
+# Whisper und die KI schreiben diese Wörter dann genau so.
+# Zeilen mit # sind Kommentare.
+#
+# Diese Datei wird beim ersten Start nach "dictionary.txt" kopiert –
+# bearbeite dictionary.txt (Tray-Menü → "Wörterbuch bearbeiten").
+
+Dictum
+Supabase
+Wispr Flow

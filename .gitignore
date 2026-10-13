@@ -5,6 +5,10 @@
 supabase/.env
 supabase/functions/.env
 
+# --- Persönliche Daten der Desktop-App (Vorlagen: *.example.*) ---
+desktop/dictionary.txt
+desktop/snippets.toml
+
 # --- Python (Desktop-App) ---
 __pycache__/
 *.py[cod]
