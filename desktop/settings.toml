@@ -19,7 +19,15 @@ mode = "both"
 hold_threshold = 0.4
 
 [transcription]
-# Whisper-Modellgröße: "tiny", "base", "small", "medium", "large-v3-turbo"
+# Wo die Sprache erkannt wird (im Tray-Menü umschaltbar):
+#   "local"  = faster-whisper auf diesem PC – kostenlos, privat, ~2 s
+#   "openai" = OpenAI-Cloud – braucht OPENAI_API_KEY in .env, kostet ~0,3 Cent/Minute
+engine = "local"
+
+# Modell für die OpenAI-Cloud-Transkription
+openai_model = "gpt-4o-mini-transcribe"
+
+# Lokales Whisper-Modell: "tiny", "base", "small", "medium", "large-v3-turbo"
 # Größer = genauer, aber langsamer. "small" ist auf der CPU ein guter Kompromiss.
 model = "small"
 
@@ -31,6 +39,18 @@ language = "de"
 
 # Fällt die automatische Erkennung unsicher aus, wird diese Sprache genommen
 fallback_language = "de"
+
+[cleanup]
+# KI-Bereinigung: Füllwörter raus, Selbstkorrekturen anwenden, Satzzeichen, Listen.
+# Im Tray-Menü an/aus. Ohne Internet oder Key wird automatisch der Rohtext eingefügt.
+enabled = true
+
+# Wer bereinigt: "anthropic" (Claude) oder "openai"
+provider = "anthropic"
+
+# Schnelle, günstige Modelle – beim Diktieren zählt jede Zehntelsekunde
+anthropic_model = "claude-haiku-5-5"
+openai_model = "gpt-5-mini"
 
 [feedback]
 # Kurzer Piepton bei Start und Stopp der Aufnahme

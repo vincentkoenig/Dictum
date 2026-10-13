@@ -4,7 +4,7 @@ import ctypes
 import logging
 
 from .app import DictumApp
-from .config import load_settings
+from .config import load_env, load_settings
 
 
 def main() -> None:
@@ -19,6 +19,7 @@ def main() -> None:
     except (AttributeError, OSError):
         pass
 
+    load_env()  # API-Keys aus .env laden, bevor die KI-Clients erzeugt werden
     DictumApp(load_settings()).run()
 
 

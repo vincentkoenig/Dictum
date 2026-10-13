@@ -33,3 +33,17 @@ def test_unbekannte_taste_wird_abgelehnt(tmp_path):
     f.write_text('[hotkey]\nkeys = ["ctrl", "fn"]\n', encoding="utf-8")
     with pytest.raises(ValueError, match="Taste"):
         load_settings(f)
+
+
+def test_ki_bereinigung_ist_standardmaessig_an_mit_claude():
+    s = load_settings(DEFAULT_PATH)
+    assert s.cleanup.enabled is True
+    assert s.cleanup.provider == "anthropic"
+    assert s.transcription.engine == "local"
+
+
+def test_unbekannter_ki_anbieter_wird_abgelehnt(tmp_path):
+    f = tmp_path / "s.toml"
+    f.write_text('[cleanup]\nprovider = "gemini"\n', encoding="utf-8")
+    with pytest.raises(ValueError, match="provider"):
+        load_settings(f)

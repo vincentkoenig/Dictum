@@ -6,6 +6,9 @@ pynput>=1.7              # globale Hotkeys + Tastendruck simulieren (Strg+V)
 pyperclip>=1.9           # Zwischenablage lesen/schreiben
 pystray>=0.19            # Tray-Icon in der Taskleiste
 pillow>=10               # Bild für das Tray-Icon zeichnen
+anthropic>=1.13          # Claude: Diktate bereinigen (Phase 2)
+openai>=3.0              # Alternative zu Claude + Cloud-Transkription (Phase 2)
+python-dotenv>=1.0       # API-Keys aus der .env-Datei laden
 
 # Nur für die Entwicklung
 pytest>=8

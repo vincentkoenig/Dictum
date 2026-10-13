@@ -14,8 +14,12 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 # settings.toml liegt im Ordner desktop/, also eine Ebene über diesem Paket
-DEFAULT_PATH = Path(__file__).resolve().parent.parent / "settings.toml"
+DESKTOP_DIR = Path(__file__).resolve().parent.parent
+REPO_ROOT = DESKTOP_DIR.parent
+DEFAULT_PATH = DESKTOP_DIR / "settings.toml"
 
 VALID_KEYS = {
     "ctrl", "win", "alt", "shift",                      # linke ODER rechte Taste
@@ -23,6 +27,8 @@ VALID_KEYS = {
     *(f"f{n}" for n in range(1, 13)),                   # F1 … F12
 }
 VALID_MODES = {"both", "hold", "toggle"}
+VALID_ENGINES = {"local", "openai"}
+VALID_PROVIDERS = {"anthropic", "openai"}
 
 
 @dataclass
@@ -34,9 +40,19 @@ class HotkeySettings:
 
 @dataclass
 class TranscriptionSettings:
+    engine: str = "local"
+    openai_model: str = "gpt-4o-mini-transcribe"
     model: str = "small"
     language: str = "de"
     fallback_language: str = "de"
+
+
+@dataclass
+class CleanupSettings:
+    enabled: bool = True
+    provider: str = "anthropic"
+    anthropic_model: str = "claude-haiku-5-5"
+    openai_model: str = "gpt-5-mini"
 
 
 @dataclass
@@ -48,6 +64,7 @@ class FeedbackSettings:
 class Settings:
     hotkey: HotkeySettings = field(default_factory=HotkeySettings)
     transcription: TranscriptionSettings = field(default_factory=TranscriptionSettings)
+    cleanup: CleanupSettings = field(default_factory=CleanupSettings)
     feedback: FeedbackSettings = field(default_factory=FeedbackSettings)
 
 
@@ -61,6 +78,7 @@ def load_settings(path: Path = DEFAULT_PATH) -> Settings:
     settings = Settings(
         hotkey=HotkeySettings(**data.get("hotkey", {})),
         transcription=TranscriptionSettings(**data.get("transcription", {})),
+        cleanup=CleanupSettings(**data.get("cleanup", {})),
         feedback=FeedbackSettings(**data.get("feedback", {})),
     )
     _validate(settings)
@@ -80,3 +98,17 @@ def _validate(settings: Settings) -> None:
         raise ValueError(f"Ungültiger Modus '{hk.mode}'. Erlaubt: {VALID_MODES}")
     if hk.hold_threshold <= 0:
         raise ValueError("hold_threshold muss größer als 0 sein.")
+    if settings.transcription.engine not in VALID_ENGINES:
+        raise ValueError(f"Ungültige engine '{settings.transcription.engine}'. Erlaubt: {VALID_ENGINES}")
+    if settings.cleanup.provider not in VALID_PROVIDERS:
+        raise ValueError(f"Ungültiger provider '{settings.cleanup.provider}'. Erlaubt: {VALID_PROVIDERS}")
+
+
+def load_env() -> None:
+    """Lädt API-Keys aus der .env im Projektordner in die Umgebungsvariablen.
+
+    Die SDKs von Anthropic und OpenAI lesen ANTHROPIC_API_KEY bzw. OPENAI_API_KEY
+    automatisch aus der Umgebung – wir müssen die Keys also nie selbst im Code anfassen.
+    Bereits gesetzte Umgebungsvariablen haben Vorrang (override=False).
+    """
+    load_dotenv(REPO_ROOT / ".env", override=False)
