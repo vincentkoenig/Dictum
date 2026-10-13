@@ -71,12 +71,12 @@ wiederholt.
 | **Supabase als Backend** | Login, Datenbank, Datei-Speicher und Server-Funktionen aus einer Hand; läuft unabhängig vom PC; kostenloses Kontingent. |
 | **PWA statt nativer App** | Eine Codebasis für iPhone und Android, kein App-Store nötig. Grenze: kann auf dem Handy nicht in fremde Apps tippen → dort „Kopieren/Teilen“. |
 | **KI-Anbieter austauschbar** | Eine gemeinsame Schnittstelle, dahinter Claude (Standard) oder OpenAI – per Einstellung wählbar. |
-| **Deutsch + Auto-Erkennung** | Deutsch als Standard, andere Sprachen erkennt Whisper selbst. |
+| **Deutsch als Standard, Auto-Erkennung optional** | Auto-Erkennung kostet lokal ~2 s pro Diktat (gemessen). Englische Begriffe in deutschen Sätzen erkennt Whisper auch im Deutsch-Modus. Umschaltbar im Tray-Menü. |
 
 ## 4. Bausteine im Detail
 
 Pro Baustein entsteht eine eigene Erklärung, sobald er gebaut ist:
 
-- `docs/desktop.md` – Desktop-App (Phase 1, 2, 5)
+- [docs/desktop.md](desktop.md) – Desktop-App (Phase 1 ✅, 2, 5)
 - `docs/backend.md` – Supabase (Phase 3)
 - `docs/pwa.md` – Handy-App (Phase 4)
