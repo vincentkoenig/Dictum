@@ -6,10 +6,10 @@ egal ob Word, Browser, Outlook oder Slack. Dieses Dokument erklärt, wie das fun
 ## 1. Der Ablauf eines Diktats
 
 ```
- Du drückst Strg+Win
+ Du drückst die rechte Strg-Taste (einstellbar in settings.toml)
         │
         ▼
- hotkey.py      erkennt die Kombination ──► Startmenü-Trick (Masken-Taste)
+ hotkey.py      erkennt den Hotkey
         │
         ▼
  audio.py       öffnet das Mikrofon, sammelt Audio (16 kHz mono)
@@ -58,13 +58,27 @@ Zustand sie gerade ist:
 | `TOGGLED` | Nach kurzem Antippen, Aufnahme läuft weiter | Erneut drücken → **Stopp** |
 | `WAIT_RELEASE` | Fertig, warten bis Tasten los sind | Loslassen → `IDLE` |
 
-Wird während `PRESSED` eine **andere** Taste gedrückt (z. B. Strg+Win+→ für den nächsten
-Desktop), war das kein Diktat – die Aufnahme wird verworfen.
+Wird während `PRESSED` eine **andere** Taste gedrückt (z. B. C, weil man mit der rechten
+Strg-Taste eigentlich Strg+C drücken wollte), war das kein Diktat – die Aufnahme wird verworfen.
+
+### Welche Taste? (Gruppen vs. Einzeltasten)
+
+Ursprünglich war Strg+Win geplant (wie bei Wispr Flow). Weil Wispr Flow diese Kombination
+selbst belegt, ist der Standard jetzt **Strg rechts**: eine einzelne Taste, die im Alltag
+kaum benutzt wird. Damit das geht, unterscheidet `hotkey.py` zwischen
+
+- **Gruppen** wie `"ctrl"`: die linke *oder* rechte Taste, und
+- **Einzeltasten** wie `"ctrl_r"` oder `"f9"`: genau diese eine Taste.
+
+Die linke Strg-Taste (Strg+C, Strg+V …) löst deshalb nichts aus.
+
+Nicht geeignet auf deutschen Tastaturen: Strg+Alt und Alt rechts (beides ist AltGr, also
+`@`, `€`, `{`) sowie Strg+Umschalt (wechselt oft das Tastaturlayout).
 
 Die Logik kennt die echte Tastatur nicht, sondern bekommt nur Ereignisse gemeldet. Dadurch
 lässt sie sich mit Tests prüfen, ohne eine Taste zu drücken (`tests/test_hotkey.py`).
 
-### Der Startmenü-Trick
+### Der Startmenü-Trick (nur wenn die Win-Taste Teil des Hotkeys ist)
 
 Windows öffnet das Startmenü, wenn die Win-Taste losgelassen wird und *keine andere Taste*
 dazwischen kam – Zusatztasten wie Strg reichen nicht zuverlässig, um das zu verhindern. Deshalb „drückt“ Dictum unsichtbar eine Taste,

@@ -1,6 +1,6 @@
 # desktop/
 
-Python-App für Windows: **Strg+Win halten, sprechen, loslassen** – der Text erscheint
+Python-App für Windows: **rechte Strg-Taste halten, sprechen, loslassen** – der Text erscheint
 im gerade aktiven Textfeld. Wie das intern funktioniert: [docs/desktop.md](../docs/desktop.md).
 
 ## Einrichten (einmalig)
@@ -25,8 +25,8 @@ Beim allerersten Start wird das Whisper-Modell heruntergeladen (~460 MB).
 
 | Aktion | Wirkung |
 |---|---|
-| **Strg+Win halten** und sprechen, dann loslassen | Text wird eingefügt (Push-to-talk) |
-| **Strg+Win kurz antippen** | Aufnahme läuft weiter – nochmal antippen zum Beenden |
+| **Strg rechts halten** und sprechen, dann loslassen | Text wird eingefügt (Push-to-talk) |
+| **Strg rechts kurz antippen** | Aufnahme läuft weiter – nochmal antippen zum Beenden |
 | Tray-Symbol → Rechtsklick | Modus, Sprache, Beenden |
 
 Einstellungen: [settings.toml](settings.toml)
