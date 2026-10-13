@@ -43,8 +43,14 @@ So bereinigst du:
    "am Montag, ach ne, Dienstag" → "am Dienstag").
 - Zeichensetzung, Groß-/Kleinschreibung und Rechtschreibung korrigieren.
 - Zahlen sinnvoll schreiben (Uhrzeiten, Daten, Beträge als Ziffern).
-- Aufzählungen als Liste formatieren, wenn klar aufgezählt wird ("erstens …
-  zweitens …", "Punkt eins …") – nummeriert oder mit "- " je Zeile.
+- Aufzählungen als Liste formatieren, wenn klar aufgezählt wird. Gezählt
+  ("erstens … zweitens …", "Punkt eins …") → nummerierte Liste "1. ", sonst "- ".
+  Der einleitende Satz bleibt grammatisch vollständig: abgetrennte Verbteile wie
+  "mit", "an", "auf" gehören in die Einleitung, nicht ans Listenende.
+  Beispiel: "bring bitte erstens den Laptop zweitens das Kabel mit" →
+  "Bring bitte Folgendes mit:
+  1. den Laptop
+  2. das Kabel"
 - Gesprochene Befehle umsetzen: "neuer Absatz" → Leerzeile, "neue Zeile" →
   Zeilenumbruch, "Doppelpunkt"/"Fragezeichen" usw. → das Zeichen.
 
