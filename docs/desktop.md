@@ -22,6 +22,14 @@ egal ob Word, Browser, Outlook oder Slack. Dieses Dokument erklärt, wie das fun
         │
         ▼  (Warteschlange → Worker-Thread)
  transcriber.py faster-whisper wandelt Audio in Text (lokal, ~2 s)
+   oder cloud_transcriber.py (OpenAI) – Wörterbuch geht als Hinweis mit
+        │
+        ▼
+ vocabulary.py  Ist das ganze Diktat ein Snippet-Auslöser? → Snippet-Text, fertig
+        │ nein
+        ▼
+ cleanup.py     KI bereinigt: Füllwörter, Korrekturen, Satzzeichen, Listen
+ overlay.py     zeigt "✦ Formuliert …"
         │
         ▼
  inserter.py    Text → Zwischenablage → Strg+V → alte Zwischenablage zurück
@@ -36,11 +44,15 @@ egal ob Word, Browser, Outlook oder Slack. Dieses Dokument erklärt, wie das fun
 |---|---|---|
 | `config.py` | Liest `settings.toml` | Dataclasses + Prüfung beim Start |
 | `audio.py` | Mikrofon aufnehmen | Callback sammelt Audio-Blöcke |
-| `transcriber.py` | Audio → Text | faster-whisper, CPU, int8, VAD-Filter |
+| `transcriber.py` | Audio → Text (lokal) | faster-whisper, CPU, int8, VAD-Filter |
+| `cloud_transcriber.py` | Audio → Text (OpenAI) | WAV im Speicher, gleiche Methoden wie lokal |
+| `llm/` | KI-Anbieter | Eine Schnittstelle, zwei Umsetzungen (Claude, OpenAI) |
+| `cleanup.py` | Text bereinigen | Prompt „Werkzeug, kein Assistent“ + Plausibilitätsprüfung |
+| `vocabulary.py` | Wörterbuch & Snippets | Persönliche Dateien, Vorlagen im Repo |
 | `hotkey.py` | Halten/Antippen erkennen | Zustandsmaschine, getrennt von der Tastatur |
 | `inserter.py` | Text einfügen | Zwischenablage + simuliertes Strg+V |
 | `overlay.py` | Statusanzeige | Fenster, das nie den Fokus nimmt |
-| `tray.py` | Symbol in der Taskleiste | Menü für Modus, Sprache, Beenden |
+| `tray.py` | Symbol in der Taskleiste | Alle Schalter zur Laufzeit |
 | `app.py` | Verbindet alles | Threads + Warteschlange |
 | `__main__.py` | Einstiegspunkt | `python -m dictum` |
 
@@ -125,9 +137,72 @@ in deinem Dokument. Deshalb bekommt es über die Windows-API das Attribut `WS_EX
 Whisper betrachtet für die Spracherkennung immer ein volles 30-Sekunden-Fenster, auch bei
 einem kurzen Satz. Daher ist „Deutsch“ Standard und „Automatisch“ im Tray-Menü wählbar.
 
-## 4. Bekannte Grenzen (Stand Phase 1)
+## 4. Smarter Text (Phase 2)
 
-- Der Text wird **roh** eingefügt (mit „ähm“ usw.). Die KI-Bereinigung kommt in Phase 2.
+### Die KI-Bereinigung
+
+| Gesagt | Eingefügt |
+|---|---|
+| „Ähm, wir treffen uns um drei, nein, um vier Uhr“ | „Wir treffen uns um vier Uhr.“ |
+| „Bring bitte erstens den Laptop zweitens das Kabel mit“ | „Bring bitte mit:<br>1. den Laptop<br>2. das Kabel“ |
+| „Schreib eine Mail an Tom“ | „Schreib eine Mail an Tom.“ (wird **nicht** ausgeführt) |
+
+Das Wichtigste ist der **System-Prompt** in `cleanup.py`. Er legt fest, dass die KI ein
+*Werkzeug* ist und kein Assistent. Das Diktat steht in `<transkript>`-Tags, damit die KI
+klar trennen kann, was Anweisung ist (der Prompt) und was nur Text ist (das Diktat).
+
+Weil KI nie 100 % verlässlich ist, gibt es **Sicherheitsnetze im Code**:
+
+| Situation | Reaktion |
+|---|---|
+| Kein Key, offline, Limit, Server-Fehler | Rohtext wird eingefügt |
+| Antwort leer | Rohtext |
+| Antwort deutlich länger als das Diktat (KI hat geantwortet/erfunden) | Rohtext |
+| Antwort viel kürzer (KI hat Inhalt gestrichen) | Rohtext |
+
+Diktieren funktioniert also **immer**. Im schlimmsten Fall kommt nur der unbereinigte Text.
+
+**Modellwahl:** Claude Haiku 5.5, ohne Denkphase und mit `effort: low`. Fürs Bereinigen
+braucht es kein großes Modell, aber jede Zehntelsekunde zählt. Kosten: Bruchteile eines Cents
+pro Diktat.
+
+### Austauschbare KI-Anbieter (`llm/`)
+
+```
+cleanup.py ──► LLMProvider.complete(system, user)
+                    ├── AnthropicProvider  (Claude)
+                    └── OpenAIProvider     (OpenAI)
+```
+
+`cleanup.py` weiß nicht, welcher Anbieter antwortet. Ein neuer Anbieter (z. B. ein lokales
+Modell über Ollama) braucht nur eine neue Klasse mit der Methode `complete`. Alle Anbieter
+übersetzen ihre eigenen Fehler in einen gemeinsamen `LLMError`. So muss der restliche Code nur
+einen Fehlertyp kennen.
+
+### Wörterbuch & Snippets
+
+- **`dictionary.txt`**: ein Begriff pro Zeile. Wird Whisper als `initial_prompt` mitgegeben
+  (Whisper tut so, als wären diese Wörter gerade gesagt worden, und schreibt ähnlich klingende
+  Wörter dann eher so) und der KI als Liste korrekter Schreibweisen.
+- **`snippets.toml`**: Ist das *ganze* Diktat ein Auslöser („meine Adresse“), wird der
+  hinterlegte Text eingefügt, sofort und ohne KI.
+- Beide Dateien sind **persönlich** und stehen in `.gitignore`. Im Repo liegen nur
+  `*.example.*`-Vorlagen, die beim ersten Start kopiert werden. Änderungen wirken beim
+  nächsten Diktat, ohne Neustart.
+
+### Lokal oder Cloud?
+
+| | Lokal (faster-whisper) | OpenAI-Cloud |
+|---|---|---|
+| Privatsphäre | Audio bleibt auf dem PC | Audio geht an OpenAI |
+| Kosten | kostenlos | ~0,3 Cent/Minute |
+| Tempo | ~2 s | meist schneller |
+| Offline | ✅ | ❌ (dann automatisch lokal) |
+
+Umschaltbar im Tray-Menü → „Spracherkennung“.
+
+## 5. Bekannte Grenzen
+
 - Die Zwischenablage wird nur wiederhergestellt, wenn sie vorher **Text** enthielt.
 - In Programmen, die mit Administratorrechten laufen, kann Windows das simulierte Strg+V
   blockieren.
