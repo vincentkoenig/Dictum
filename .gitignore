@@ -1,0 +1,41 @@
+# --- Geheimnisse: NIEMALS committen ---
+.env
+.env.*
+!.env.example
+supabase/.env
+supabase/functions/.env
+
+# --- Python (Desktop-App) ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- Node (PWA) ---
+node_modules/
+dist/
+.vite/
+*.local
+
+# --- Supabase CLI ---
+supabase/.temp/
+supabase/.branches/
+
+# --- Lokale Daten: Aufnahmen und Whisper-Modelle (groß, privat) ---
+*.wav
+*.webm
+*.ogg
+*.mp3
+*.m4a
+recordings/
+models/
+
+# --- Editor / OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
