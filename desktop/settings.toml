@@ -59,6 +59,20 @@ openai_model = "gpt-5-mini"
 url = "https://wmbafxknzbaogemacvdb.supabase.co"
 publishable_key = "sb_publishable_kbWytftMtnkxLDoUZXYQwQ_T53gIvY_"
 
+[meeting]
+# Meetings am PC: Tray-Menü → "Meeting aufnehmen"
+# PC-Ton (Teams, Zoom, Meet …) zusätzlich zum Mikrofon aufnehmen
+include_system_audio = true
+# Länge der Stücke, die einzeln hochgeladen und transkribiert werden
+chunk_minutes = 5
+# Lautstärke-Faktoren beim Mischen (1.0 = unverändert)
+mic_gain = 1.0
+system_gain = 0.8
+# Wörterbuch und Snippets alle X Minuten mit der Cloud abgleichen (0 = nur beim Start)
+sync_minutes = 15
+# Adresse der Handy-/Web-App – dort werden fertige Meetings geöffnet
+web_url = "https://vincentkoenig.github.io/Dictum/"
+
 [feedback]
 # Kurzer Piepton bei Start und Stopp der Aufnahme
 sounds = true

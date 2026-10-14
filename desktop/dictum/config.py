@@ -62,6 +62,16 @@ class CloudSettings:
 
 
 @dataclass
+class MeetingSettings:
+    include_system_audio: bool = True
+    chunk_minutes: float = 5
+    mic_gain: float = 1.0
+    system_gain: float = 0.8
+    sync_minutes: float = 15
+    web_url: str = "https://vincentkoenig.github.io/Dictum/"
+
+
+@dataclass
 class FeedbackSettings:
     sounds: bool = True
 
@@ -72,6 +82,7 @@ class Settings:
     transcription: TranscriptionSettings = field(default_factory=TranscriptionSettings)
     cleanup: CleanupSettings = field(default_factory=CleanupSettings)
     cloud: CloudSettings = field(default_factory=CloudSettings)
+    meeting: MeetingSettings = field(default_factory=MeetingSettings)
     feedback: FeedbackSettings = field(default_factory=FeedbackSettings)
 
 
@@ -87,6 +98,7 @@ def load_settings(path: Path = DEFAULT_PATH) -> Settings:
         transcription=TranscriptionSettings(**data.get("transcription", {})),
         cleanup=CleanupSettings(**data.get("cleanup", {})),
         cloud=CloudSettings(**data.get("cloud", {})),
+        meeting=MeetingSettings(**data.get("meeting", {})),
         feedback=FeedbackSettings(**data.get("feedback", {})),
     )
     _validate(settings)

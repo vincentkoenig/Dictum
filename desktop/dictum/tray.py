@@ -39,11 +39,20 @@ PROVIDER_LABELS = {
 }
 
 
-def _draw_icon() -> Image.Image:
+TEMPLATE_LABELS = {
+    "meeting": "Meeting",
+    "interview": "Interview",
+    "lecture": "Vorlesung",
+    "note": "Notiz",
+}
+
+
+def _draw_icon(recording: bool = False) -> Image.Image:
+    """Mikrofon auf dunklem Kreis – während einer Meeting-Aufnahme auf rotem Kreis."""
     size = 64
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
-    d.ellipse((0, 0, size - 1, size - 1), fill=(31, 31, 35, 255))
+    d.ellipse((0, 0, size - 1, size - 1), fill=(229, 72, 77, 255) if recording else (31, 31, 35, 255))
     white = (242, 242, 242, 255)
     d.rounded_rectangle((24, 12, 40, 38), radius=8, fill=white)   # Mikrofon-Kopf
     d.arc((17, 22, 47, 46), start=0, end=180, fill=white, width=3)  # Halterung
@@ -67,8 +76,31 @@ class Tray:
                 )
             return pystray.Menu(*(item(v, l) for v, l in labels.items()))
 
+        meetings = app.meetings
+
+        def start_item(template: str, label: str) -> pystray.MenuItem:
+            return pystray.MenuItem(label, lambda: meetings.start(template))
+
+        def stop_text(_item) -> str:
+            m, s = divmod(int(meetings.elapsed), 60)
+            return f"⏹ Meeting beenden ({m:02d}:{s:02d})"
+
         menu = pystray.Menu(
             pystray.MenuItem(f"Dictum – {hotkey_label}", None, enabled=False),
+            pystray.Menu.SEPARATOR,
+            # Während der Aufnahme sieht man nur "beenden", sonst nur "aufnehmen"
+            pystray.MenuItem(stop_text, lambda: meetings.stop(), visible=lambda _i: meetings.is_recording),
+            pystray.MenuItem(
+                "🔴 Meeting aufnehmen",
+                pystray.Menu(*(start_item(t, l) for t, l in TEMPLATE_LABELS.items())),
+                visible=lambda _i: not meetings.is_recording,
+            ),
+            pystray.MenuItem(
+                "Letztes Meeting öffnen",
+                lambda: meetings.open_last(),
+                enabled=lambda _i: meetings.last_recording_id is not None,
+            ),
+            pystray.MenuItem("Dictum im Web öffnen", lambda: meetings.open_web()),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem(
                 "KI-Bereinigung",
@@ -82,10 +114,32 @@ class Tray:
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Wörterbuch bearbeiten", lambda: app.open_dictionary()),
             pystray.MenuItem("Snippets bearbeiten", lambda: app.open_snippets()),
+            pystray.MenuItem("Mit Cloud abgleichen", lambda: meetings.sync_now()),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Beenden", lambda: app.quit()),
         )
+        self.hotkey_label = hotkey_label
         self.icon = pystray.Icon("dictum", _draw_icon(), f"Dictum ({hotkey_label})", menu)
+        self._recording_shown = False
+
+    def refresh(self, recording: bool, elapsed: float) -> None:
+        """Symbol, Tooltip und Menü an den aktuellen Zustand anpassen."""
+        if recording != self._recording_shown:
+            self.icon.icon = _draw_icon(recording)
+            self._recording_shown = recording
+        if recording:
+            m, s = divmod(int(elapsed), 60)
+            self.icon.title = f"Dictum – Meeting läuft {m:02d}:{s:02d}"
+        else:
+            self.icon.title = f"Dictum ({self.hotkey_label})"
+        self.icon.update_menu()
+
+    def notify(self, title: str, message: str) -> None:
+        """Windows-Benachrichtigung unten rechts."""
+        try:
+            self.icon.notify(message, title)
+        except Exception:
+            pass  # Benachrichtigungen sind nett, aber nicht wichtig
 
     def start(self) -> None:
         # run_detached: das Symbol läuft im Hintergrund, der Hauptthread bleibt für tkinter frei

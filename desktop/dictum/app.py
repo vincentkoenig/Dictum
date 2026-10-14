@@ -37,6 +37,7 @@ from .config import Settings
 from .hotkey import HotkeyListener, HotkeyStateMachine, hotkey_label
 from .inserter import insert_text
 from .llm import LLMError, create_provider
+from .meeting_controller import MeetingController
 from .overlay import Overlay
 from .transcriber import LocalTranscriber
 from .tray import Tray
@@ -76,6 +77,13 @@ class DictumApp:
             hold_threshold=settings.hotkey.hold_threshold,
         )
         self.listener = HotkeyListener(settings.hotkey.keys, self.machine)
+        # Meetings: braucht notify/refresh vom Tray – das Tray braucht die Meetings fürs
+        # Menü. Deshalb über kleine Lambdas verbunden, die erst später aufgerufen werden.
+        self.meetings = MeetingController(
+            settings,
+            notify=lambda title, text: self.tray.notify(title, text),
+            on_change=self._refresh_tray,
+        )
         self.tray = Tray(self, hotkey_label(settings.hotkey.keys))
         self._jobs: queue.Queue[np.ndarray | None] = queue.Queue()
         ensure_user_files()
@@ -85,6 +93,8 @@ class DictumApp:
         threading.Thread(target=self._worker, daemon=True).start()
         self.listener.start()
         self.tray.start()
+        self.meetings.start_worker()
+        threading.Thread(target=self._tray_ticker, daemon=True).start()
         log.info(
             "Dictum läuft. Spracherkennung: %s · KI-Bereinigung: %s (%s)",
             self.engine, "an" if self.cleanup_enabled else "aus", self.provider.name,
@@ -93,6 +103,8 @@ class DictumApp:
 
     def quit(self) -> None:
         log.info("Beende Dictum …")
+        # Laufendes Meeting sauber abschließen – der Upload passiert beim nächsten Start
+        self.meetings.stop()
         self.listener.stop()
         self._jobs.put(None)  # Signal an den Worker: aufhören
         self.tray.stop()
@@ -121,6 +133,16 @@ class DictumApp:
         elif setting == "provider":
             self.provider = create_provider(value, self.settings.cleanup)
         log.info("Einstellung geändert: %s = %s", setting, value)
+
+    def _refresh_tray(self) -> None:
+        self.tray.refresh(self.meetings.is_recording, self.meetings.elapsed)
+
+    def _tray_ticker(self) -> None:
+        """Aktualisiert während eines Meetings jede Sekunde die Laufzeit im Tray."""
+        while True:
+            time.sleep(1)
+            if self.meetings.is_recording:
+                self._refresh_tray()
 
     def open_dictionary(self) -> None:
         os.startfile(DICTIONARY_PATH)  # öffnet die Datei im Standard-Editor
