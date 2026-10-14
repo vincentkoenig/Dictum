@@ -1,0 +1,56 @@
+# GitHub Action: Bei jedem Push auf main, der etwas in pwa/ ändert, wird die Handy-App
+# getestet, gebaut und auf GitHub Pages veröffentlicht:
+#   https://vincentkoenig.github.io/Dictum/
+#
+# Eine "Action" läuft auf einem Server von GitHub – dein PC muss dafür nicht an sein.
+# Ablauf und Logs: im Repo unter dem Reiter "Actions".
+
+name: PWA veröffentlichen
+
+on:
+  push:
+    branches: [main]
+    paths: ["pwa/**", ".github/workflows/pwa.yml"]
+  workflow_dispatch: # erlaubt den manuellen Start im Actions-Reiter
+
+# Rechte, die der Workflow braucht, um auf GitHub Pages zu veröffentlichen
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Nie zwei Veröffentlichungen gleichzeitig
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: pwa
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: pwa/package-lock.json
+      - run: npm ci        # exakt die Versionen aus package-lock.json installieren
+      - run: npm test      # schlägt ein Test fehl, wird NICHT veröffentlicht
+      - run: npm run build # TypeScript prüfen + bauen → pwa/dist
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: pwa/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5
