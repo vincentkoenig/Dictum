@@ -42,13 +42,38 @@ def mix(mic: np.ndarray, system: np.ndarray, mic_gain: float = 1.0, system_gain:
     return np.clip(mic * mic_gain + system * system_gain, -1.0, 1.0).astype(np.float32)
 
 
+def quietest_cut(audio: np.ndarray, search_samples: int, window: int) -> int:
+    """Findet in den letzten `search_samples` die leiseste Stelle (Fenster der Länge
+    `window`) und gibt die Schnittposition zurück – meist eine Sprechpause.
+
+    "Leise" = kleinste mittlere Energie (Quadrat der Werte) im Fenster."""
+    start = max(0, len(audio) - search_samples)
+    region = audio[start:]
+    if len(region) <= window:
+        return len(audio)
+    energy = np.convolve(region.astype(np.float64) ** 2, np.ones(window), mode="valid")
+    # Bei Gleichstand (z. B. Dauerton, keine Pause) die SPÄTESTE Stelle nehmen, damit
+    # das Stück möglichst nah an der gewünschten Länge bleibt → argmin rückwärts
+    best = len(energy) - 1 - int(np.argmin(energy[::-1]))
+    return start + best + window // 2  # Mitte des leisesten Fensters
+
+
 class ChunkAccumulator:
-    """Sammelt Audio und gibt immer dann ein fertiges Stück zurück, wenn
-    `chunk_seconds` voll sind. Am Ende liefert `flush()` den Rest."""
+    """Sammelt Audio und gibt ein fertiges Stück zurück, sobald `chunk_seconds` voll sind.
+
+    Geschnitten wird nicht stur nach Zeit, sondern an der leisesten Stelle der letzten
+    3 Sekunden. Sonst würden Sätze mitten im Wort zerteilt – Whisper erkennt die
+    Bruchstücke schlecht und erfindet am Rand gern Füllwörter. Am Ende liefert
+    `flush()` den Rest."""
+
+    SEARCH_SECONDS = 3.0
+    WINDOW_SECONDS = 0.2
 
     def __init__(self, chunk_seconds: float, sample_rate: int = SAMPLE_RATE) -> None:
         self.chunk_samples = int(chunk_seconds * sample_rate)
         self.sample_rate = sample_rate
+        self.search = min(int(self.SEARCH_SECONDS * sample_rate), self.chunk_samples // 2)
+        self.window = max(1, int(self.WINDOW_SECONDS * sample_rate))
         self._parts: list[np.ndarray] = []
         self._size = 0
 
@@ -58,8 +83,9 @@ class ChunkAccumulator:
         done = []
         while self._size >= self.chunk_samples:
             data = np.concatenate(self._parts)
-            done.append(data[: self.chunk_samples])
-            rest = data[self.chunk_samples:]
+            cut = quietest_cut(data[: self.chunk_samples], self.search, self.window)
+            done.append(data[:cut])
+            rest = data[cut:]
             self._parts, self._size = ([rest] if len(rest) else []), len(rest)
         return done
 
