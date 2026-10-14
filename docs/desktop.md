@@ -201,7 +201,101 @@ einen Fehlertyp kennen.
 
 Umschaltbar im Tray-Menü → „Spracherkennung“.
 
-## 5. Bekannte Grenzen
+## 5. Meetings am PC (Phase 5)
+
+Tray-Menü → **🔴 Meeting aufnehmen** → Vorlage wählen (Meeting, Interview, Vorlesung, Notiz).
+Während der Aufnahme ist das Tray-Symbol **rot**, und der Tooltip zeigt die Laufzeit. **⏹ Meeting
+beenden** schließt ab. Wenig später meldet eine Windows-Benachrichtigung „Zusammenfassung
+fertig“, und **Letztes Meeting öffnen** zeigt sie in der Web-App.
+
+### Der Weg eines Meetings
+
+```
+ Mikrofon ─────► Thread ─► Puffer ┐
+                                  ├─► mischen ─► ChunkAccumulator ─► Opus ─► Warteschlange
+ PC-Ton (Loopback) ► Thread ─► Puffer ┘   (Summe)   (~5 Min., Schnitt         (Dateien auf
+                                                     in Sprechpause)          der Festplatte)
+                                                                                   │
+                     Benachrichtigung ◄── Status abfragen ◄── Supabase ◄── Upload ┘
+                                                (Phase-3-Backend: transcribe → summarize)
+```
+
+| Datei | Aufgabe |
+|---|---|
+| `meeting.py` | Aufnahme von Mikrofon und PC-Ton, mischen, in Stücke teilen |
+| `encoder.py` | Stücke als Opus/OGG speichern |
+| `upload_queue.py` | Warteschlange auf der Festplatte (`desktop/recordings/queue/`) |
+| `meeting_controller.py` | Start/Stopp, Hintergrund-Upload, auf Ergebnis warten, Benachrichtigung |
+| `sync.py` | Wörterbuch und Snippets mit der Cloud abgleichen |
+| `cloud.py` | Supabase-Client, inklusive automatischer Login-Erneuerung |
+
+### PC-Ton per WASAPI-Loopback
+
+Windows bietet für jedes Ausgabegerät ein **Loopback**, eine Art virtuelles Mikrofon, das genau
+das aufnimmt, was gerade abgespielt wird. Dazu gehört auch die Stimme der anderen in Teams oder
+Zoom. Die Bibliothek `soundcard` macht es zugänglich (`include_loopback=True`). Wird nichts
+abgespielt, liefert der Loopback Stille, und die Aufnahme läuft trotzdem weiter.
+
+Beide Quellen laufen in **eigenen Threads**, weil das Lesen blockiert. Ein dritter Thread nimmt
+alle 0,5 s von beiden gleich viel, **addiert** die Spuren (mit Lautstärke-Faktoren) und begrenzt
+das Ergebnis auf −1…1, damit nichts übersteuert.
+
+### Schnitt in der Sprechpause
+
+Der erste Probelauf hat gezeigt: Werden die Stücke stur nach Zeit geschnitten, zerreißt es Sätze.
+Whisper erkennt die Bruchstücke schlecht und erfand am Rand ein „Hm“. Deshalb sucht
+`quietest_cut()` in den letzten **3 Sekunden** vor der Grenze die **leiseste 200-ms-Stelle** und
+schneidet dort, also meist in einer Atempause.
+
+| | Probelauf 1 (starr) | Probelauf 2 (Pause) |
+|---|---|---|
+| Stücklängen | 12,0 s · 12,0 s · 5,5 s | 10,6 s · 11,9 s · 6,9 s |
+| Transkript | „…Offen ist noch. / Ob wir…“, „Hm, die Aufnahmen…“ | ganze Sätze, kein erfundenes „Hm“ |
+
+### Warum Opus?
+
+| Format | 5 Minuten |
+|---|---|
+| WAV, 48 kHz, 16 Bit | ~28 MB, über dem OpenAI-Limit von 25 MB |
+| **Opus** | **~4 MB** (gemessen: 12 s ≈ 155 KB) |
+
+### Nichts geht verloren
+
+Wie in der Handy-App wird **alles zuerst gespeichert, dann hochgeladen**. Die Warteschlange liegt
+als Dateien in `desktop/recordings/queue/` (in `.gitignore`):
+- Ohne Netz bleiben die Dateien liegen und werden alle 30 s erneut versucht.
+- Nach Absturz oder Neustart lädt Dictum beim nächsten Start hoch.
+- Jeder Schritt ist **idempotent**. Ein Beispiel: `finish()` ändert eine Aufnahme nur, solange
+  sie noch `uploading` ist. Sonst würde ein wiederholter Aufruf eine fertige Aufnahme auf
+  „transcribing“ zurücksetzen. Diesen Fehler hat genau diese Überlegung gefunden.
+
+**Login-Erneuerung:** Supabase-Tokens gelten 1 Stunde. Weil ein Meeting länger dauern kann, holt
+`cloud.py` kurz vor Ablauf mit dem *refresh token* ein neues.
+
+### Wörterbuch und Snippets abgleichen
+
+Beim Start und alle 15 Minuten (`sync_minutes`) gleicht `sync.py` `dictionary.txt`/`snippets.toml`
+mit der Cloud ab. Dort pflegt die Handy-App ihre Einträge. **Es wird nur ergänzt, nie gelöscht.**
+Ohne Zeitstempel ist nicht erkennbar, ob ein fehlender Eintrag gelöscht wurde oder auf der
+anderen Seite neu ist. Löschen macht man deshalb bewusst an beiden Stellen. PC-Diktate selbst
+bleiben lokal und gehen nicht in die Cloud.
+
+### Ausprobieren ohne echtes Meeting
+
+```powershell
+cd desktop
+.venv\Scripts\python -X utf8 scripts\meeting_e2e.py   # spielt ~25 s Sprachausgabe ab
+```
+
+## 6. Bekannte Grenzen
+
+- **Einwilligung:** Dictum erinnert beim Start daran (§ 201 StGB). Fragen musst du selbst.
+- **Kopfhörer und Bluetooth:** Aufgenommen wird der PC-Ton des Standard-Ausgabegeräts. Wechselt
+  man während des Meetings das Gerät, fehlt danach der PC-Ton.
+- **Eine Spur:** Mikrofon und PC-Ton werden gemischt. Wer was gesagt hat, unterscheidet erst eine
+  Sprechererkennung (Idee für Phase 6).
+
+### Allgemein
 
 - Die Zwischenablage wird nur wiederhergestellt, wenn sie vorher **Text** enthielt.
 - In Programmen, die mit Administratorrechten laufen, kann Windows das simulierte Strg+V

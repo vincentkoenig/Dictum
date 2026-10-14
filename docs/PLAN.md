@@ -10,7 +10,7 @@ Jede Phase besteht aus mehreren kleinen Commits und bekommt eine Erklärung in `
 | 2 | **Smarter Text** – KI-Bereinigung (Claude, austauschbar mit OpenAI), persönliches Wörterbuch, Snippets | ✅ |
 | 3 | **Supabase-Backend** – Schema, Login, Audio-Speicher, Edge Functions `transcribe`, `summarize` & `dictate`, Zusammenfassungs-Vorlagen | ✅ |
 | 4 | **Handy-PWA** – Login, Diktat + Kopieren, Gespräche aufnehmen, Offline-Warteschlange, Liste/Suche, Detailansicht, Markdown-Export | ✅ |
-| 5 | **Meetings am PC** – Mikrofon + PC-Ton aufnehmen, Upload nach Supabase, Verlauf synchronisieren | ⏳ |
+| 5 | **Meetings am PC** – Mikrofon + PC-Ton aufnehmen, Upload nach Supabase, Wörterbuch/Snippets abgleichen | ✅ |
 | 6 | **Extras** (einzeln wählbar) – Sprechererkennung, „Frag deine Aufnahmen“, Mindmap, Stil pro App | 💡 |
 
 ## Was wir uns von den Vorbildern abschauen
