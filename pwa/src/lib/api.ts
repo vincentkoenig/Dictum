@@ -58,7 +58,7 @@ export async function dictate(blob: Blob, language = "de"): Promise<{ raw: strin
   const form = new FormData();
   form.append("audio", blob, `diktat.${extensionFor(blob.type)}`);
   form.append("language", language);
-  return check(await supabase.functions.invoke("dictate", { body: form }));
+  return check(await supabase.functions.invoke("dictate", { body: form })) ?? { raw: "", text: "" };
 }
 
 // --- Aufnahmen ---------------------------------------------------------------------
@@ -104,7 +104,7 @@ export async function deleteRecording(id: string): Promise<void> {
 // --- Wörterbuch & Snippets -----------------------------------------------------------
 
 export async function listTerms(): Promise<{ id: number; term: string }[]> {
-  return check(await supabase.from("dictionary_terms").select("id, term").order("term"));
+  return check(await supabase.from("dictionary_terms").select("id, term").order("term")) ?? [];
 }
 
 export async function addTerm(term: string): Promise<void> {
@@ -116,7 +116,7 @@ export async function deleteTerm(id: number): Promise<void> {
 }
 
 export async function listSnippets(): Promise<{ id: number; trigger: string; text: string }[]> {
-  return check(await supabase.from("snippets").select("id, trigger, text").order("trigger"));
+  return check(await supabase.from("snippets").select("id, trigger, text").order("trigger")) ?? [];
 }
 
 export async function addSnippet(trigger: string, text: string): Promise<void> {

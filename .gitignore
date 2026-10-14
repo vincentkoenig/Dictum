@@ -43,3 +43,6 @@ models/
 .idea/
 .DS_Store
 Thumbs.db
+
+# --- Lokale Claude-Code-Einstellungen ---
+.claude/
