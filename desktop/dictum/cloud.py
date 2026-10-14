@@ -38,6 +38,8 @@ class CloudError(Exception):
 class Session:
     access_token: str
     user_id: str
+    refresh_token: str = ""
+    expires_at: float = 0.0  # Unix-Zeit, ab der das Token ungültig ist
 
 
 class DictumCloud:
@@ -59,13 +61,39 @@ class DictumCloud:
         )
         if r.status_code != 200:
             raise CloudError(f"Login fehlgeschlagen: {r.json().get('msg') or r.text}")
-        data = r.json()
-        self.session = Session(data["access_token"], data["user"]["id"])
+        self.session = self._session_from(r.json())
         return self.session
+
+    @staticmethod
+    def _session_from(data: dict) -> Session:
+        return Session(
+            access_token=data["access_token"],
+            user_id=data["user"]["id"],
+            refresh_token=data.get("refresh_token", ""),
+            expires_at=time.time() + data.get("expires_in", 3600),
+        )
+
+    def _refresh_if_needed(self) -> None:
+        """Login-Tokens gelten nur 1 Stunde. Ein Meeting kann länger dauern – deshalb
+        holen wir kurz vor Ablauf mit dem "refresh token" ein neues."""
+        s = self.session
+        if s is None or not s.refresh_token or time.time() < s.expires_at - 120:
+            return
+        r = requests.post(
+            f"{self.url}/auth/v1/token?grant_type=refresh_token",
+            headers={"apikey": self.key},
+            json={"refresh_token": s.refresh_token},
+            timeout=TIMEOUT,
+        )
+        if r.status_code != 200:
+            raise CloudError(f"Login konnte nicht erneuert werden: {r.text[:200]}")
+        self.session = self._session_from(r.json())
+        log.info("Login erneuert")
 
     def _headers(self, **extra: str) -> dict[str, str]:
         if self.session is None:
             raise CloudError("Nicht eingeloggt – zuerst sign_in() aufrufen")
+        self._refresh_if_needed()
         return {"apikey": self.key, "Authorization": f"Bearer {self.session.access_token}", **extra}
 
     def _check(self, r: requests.Response, what: str) -> requests.Response:
@@ -76,16 +104,24 @@ class DictumCloud:
     # --- Gesprächsaufnahmen -------------------------------------------------------
 
     def create_recording(self, template: str = "meeting", language: str = "de",
-                         title: str | None = None) -> str:
+                         title: str | None = None, recording_id: str | None = None) -> str:
+        """Legt eine Aufnahme an. Mit vorgegebener ID ist das wiederholbar: Gibt es sie
+        schon, passiert nichts ("ignore-duplicates") – wichtig für die Warteschlange."""
+        row = {"kind": "conversation", "template": template, "language": language,
+               "source": "desktop", "title": title}
+        prefer = "return=representation"
+        if recording_id:
+            row["id"] = recording_id
+            prefer += ",resolution=ignore-duplicates"
         r = requests.post(
             f"{self.url}/rest/v1/recordings",
             # "return=representation": die angelegte Zeile (mit ihrer neuen ID) zurückgeben
-            headers=self._headers(Prefer="return=representation"),
-            json={"kind": "conversation", "template": template, "language": language,
-                  "source": "desktop", "title": title},
+            headers=self._headers(Prefer=prefer),
+            json=row,
             timeout=TIMEOUT,
         )
-        return self._check(r, "Aufnahme anlegen").json()[0]["id"]
+        rows = self._check(r, "Aufnahme anlegen").json()
+        return rows[0]["id"] if rows else recording_id
 
     def upload_chunk(self, recording_id: str, idx: int, audio: bytes,
                      content_type: str = "audio/wav", duration_seconds: float | None = None) -> None:
@@ -120,8 +156,10 @@ class DictumCloud:
     def finish(self, recording_id: str, chunk_count: int, duration_seconds: float | None = None) -> dict:
         """Meldet: Alle Stücke sind hochgeladen. Startet die Zusammenfassung, sobald
         alle Stücke transkribiert sind."""
+        # Nur ändern, solange noch "uploading" – sonst würde ein wiederholter Aufruf eine
+        # schon fertige Aufnahme zurück auf "transcribing" setzen
         r = requests.patch(
-            f"{self.url}/rest/v1/recordings?id=eq.{recording_id}",
+            f"{self.url}/rest/v1/recordings?id=eq.{recording_id}&status=eq.uploading",
             headers=self._headers(),
             json={"chunk_count": chunk_count, "status": "transcribing", "duration_seconds": duration_seconds},
             timeout=TIMEOUT,
@@ -186,3 +224,31 @@ class DictumCloud:
             timeout=TIMEOUT,
         )
         return self._check(r, "Diktat").json()
+
+    # --- Wörterbuch & Snippets (für sync.py) ------------------------------------------
+
+    def list_terms(self) -> list[str]:
+        r = requests.get(f"{self.url}/rest/v1/dictionary_terms?select=term", headers=self._headers(),
+                         timeout=TIMEOUT)
+        return [row["term"] for row in self._check(r, "Wörterbuch laden").json()]
+
+    def add_terms(self, terms: list[str]) -> None:
+        if not terms:
+            return
+        r = requests.post(f"{self.url}/rest/v1/dictionary_terms",
+                          headers=self._headers(Prefer="resolution=ignore-duplicates"),
+                          json=[{"term": t} for t in terms], timeout=TIMEOUT)
+        self._check(r, "Wörterbuch hochladen")
+
+    def list_snippets(self) -> list[dict]:
+        r = requests.get(f"{self.url}/rest/v1/snippets?select=trigger,text", headers=self._headers(),
+                         timeout=TIMEOUT)
+        return self._check(r, "Snippets laden").json()
+
+    def add_snippets(self, snippets: list[dict]) -> None:
+        if not snippets:
+            return
+        r = requests.post(f"{self.url}/rest/v1/snippets",
+                          headers=self._headers(Prefer="resolution=ignore-duplicates"),
+                          json=snippets, timeout=TIMEOUT)
+        self._check(r, "Snippets hochladen")
