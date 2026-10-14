@@ -14,7 +14,7 @@ Dictum ist ein selbst gebautes Sprach-Werkzeug, inspiriert von
 | 📝 **Zusammenfassungen** – Kernpunkte, To-dos, Entscheidungen, per Vorlage | Pocket / Plaud | überall |
 | 📱 **Handy-App (PWA)** – auch offline aufnehmen, später synchronisieren | Pocket / Plaud | Handy |
 
-> **Status:** 🚧 Im Aufbau – siehe [Projektplan](docs/PLAN.md).
+> **Status:** Phasen 0–4 fertig · 📱 Handy-App: https://vincentkoenig.github.io/Dictum/ · [Projektplan](docs/PLAN.md)
 
 ## Wie es funktioniert (Kurzfassung)
 

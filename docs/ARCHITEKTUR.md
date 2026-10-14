@@ -79,4 +79,4 @@ Pro Baustein entsteht eine eigene Erklärung, sobald er gebaut ist:
 
 - [docs/desktop.md](desktop.md) – Desktop-App (Phase 1 ✅, 2, 5)
 - [docs/backend.md](backend.md) – Supabase (Phase 3 ✅)
-- `docs/pwa.md` – Handy-App (Phase 4)
+- [docs/pwa.md](pwa.md) – Handy-App (Phase 4 ✅)

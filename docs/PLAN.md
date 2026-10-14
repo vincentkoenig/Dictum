@@ -9,7 +9,7 @@ Jede Phase besteht aus mehreren kleinen Commits und bekommt eine Erklärung in `
 | 1 | **Diktieren am PC (MVP)** – Hotkey (halten/antippen) → Mikrofon → faster-whisper → Text ins aktive Feld; Tray-Icon, Overlay, Einstellungen | ✅ |
 | 2 | **Smarter Text** – KI-Bereinigung (Claude, austauschbar mit OpenAI), persönliches Wörterbuch, Snippets | ✅ |
 | 3 | **Supabase-Backend** – Schema, Login, Audio-Speicher, Edge Functions `transcribe`, `summarize` & `dictate`, Zusammenfassungs-Vorlagen | ✅ |
-| 4 | **Handy-PWA** – Login, Diktat + Kopieren, Gespräche aufnehmen, Offline-Warteschlange, Liste/Suche, Detailansicht, Markdown-Export | ⏳ |
+| 4 | **Handy-PWA** – Login, Diktat + Kopieren, Gespräche aufnehmen, Offline-Warteschlange, Liste/Suche, Detailansicht, Markdown-Export | ✅ |
 | 5 | **Meetings am PC** – Mikrofon + PC-Ton aufnehmen, Upload nach Supabase, Verlauf synchronisieren | ⏳ |
 | 6 | **Extras** (einzeln wählbar) – Sprechererkennung, „Frag deine Aufnahmen“, Mindmap, Stil pro App | 💡 |
 
