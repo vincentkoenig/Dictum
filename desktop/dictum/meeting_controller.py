@@ -63,6 +63,9 @@ class MeetingController:
         return self._recorder.elapsed if self._recorder else 0.0
 
     def start_worker(self) -> None:
+        # Sofort einen ersten Durchlauf: Liegengebliebenes vom letzten Mal hochladen
+        # und Wörterbuch/Snippets abgleichen – nicht erst nach 30 Sekunden
+        self._wake.set()
         threading.Thread(target=self._worker, daemon=True).start()
 
     def start(self, template: str) -> None:
