@@ -19,7 +19,11 @@ Ohne Key funktioniert Dictum trotzdem, dann aber ohne KI-Bereinigung.
 
 ## Starten
 
-Doppelklick auf `start.bat` – oder:
+**Automatisch:** Tray-Symbol → Rechtsklick → **Mit Windows starten** (Haken setzen). Dictum
+startet dann beim Anmelden ohne Konsolenfenster, nur das Mikrofon-Symbol erscheint unten rechts
+(evtl. hinter dem ^-Pfeil). Fehler stehen in `logs/dictum.log` (Tray → **Logdatei öffnen**).
+
+**Von Hand mit Konsole** (zum Ansehen des Logs): Doppelklick auf `start.bat` – oder:
 
 ```powershell
 .venv\Scripts\python -X utf8 -m dictum

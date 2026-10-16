@@ -287,7 +287,59 @@ cd desktop
 .venv\Scripts\python -X utf8 scripts\meeting_e2e.py   # spielt ~25 s Sprachausgabe ab
 ```
 
-## 6. Bekannte Grenzen
+## 6. Dauerbetrieb: Autostart, Einzelinstanz, Logdatei (Phase 6)
+
+**Ausgangspunkt:** Dictum lief nur, solange sein Terminal-Fenster offen war. Nach einem Neustart
+reagierte die Hotkey-Taste deshalb nicht mehr, und es gab keinen Hinweis warum. Drei Bausteine
+beheben das.
+
+### Autostart (`autostart.py`)
+
+Windows führt beim Anmelden alle Befehle aus, die in der Registry unter
+`HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run` stehen. Dictum trägt dort einen
+Eintrag `Dictum` ein:
+
+```
+"…\desktop\.venv\Scripts\pythonw.exe" -X utf8 "…\desktop\dictum_tray.pyw"
+```
+
+- **`pythonw.exe`** ist Python ohne Konsolenfenster. Beim Anmelden erscheint nur das Tray-Symbol.
+- **`dictum_tray.pyw`** ergänzt den Suchpfad selbst, denn Windows startet Run-Einträge nicht im
+  Projektordner.
+- Ein-/ausschalten: Tray → **Mit Windows starten** (Haken). Es braucht keine Administratorrechte,
+  und es ist nur dein Benutzerkonto betroffen.
+- **Selbstheilung:** Zieht man den Ordner um oder baut die virtuelle Umgebung neu, stimmt der Pfad
+  nicht mehr. `refresh_if_enabled()` prüft das bei jedem Start und korrigiert ihn. Ist Autostart
+  aus, wird er nie heimlich eingeschaltet.
+
+### Einzelinstanz (`single_instance.py`)
+
+Zwei laufende Dictums würden beide auf die rechte Strg-Taste hören: Ein Diktat würde doppelt
+eingefügt. Der erste Prozess legt einen **Mutex** an, ein benanntes Objekt, das Windows verwaltet.
+Ein zweiter Start merkt über ERROR_ALREADY_EXISTS, dass es das Objekt schon gibt, zeigt „Dictum
+läuft bereits“ und beendet sich. Stirbt der erste Prozess, räumt Windows den Mutex selbst weg.
+Anders als bei einer Sperrdatei bleibt also nie ein Geister-Sperrzeichen zurück.
+
+### Logdatei (`logsetup.py`)
+
+Ohne Konsole wäre jeder Fehler unsichtbar. Dictum schreibt deshalb alles nach
+`desktop/logs/dictum.log` (Tray → **Logdatei öffnen**). Bei 1 MB wird die Datei rotiert, es bleiben
+höchstens 3 alte Dateien. Auch nicht abgefangene Fehler in Hintergrund-Threads landen dort.
+Ohne Konsole gibt es kein `stderr`, Fortschrittsbalken von Bibliotheken würden abstürzen, deshalb
+wird `stderr` dann auf einen Papierkorb umgeleitet.
+
+### Wie ich es geprüft habe
+
+| Test | Ergebnis |
+|---|---|
+| Start über `pythonw.exe` aus einem fremden Arbeitsverzeichnis | läuft, Log vollständig |
+| Zweiter Start | beendet sich, Log: „läuft bereits“, weiter genau eine Instanz |
+| Gespeicherten Registry-Befehl per `CreateProcess` ausführen (wie Windows beim Anmelden) | Dictum startet |
+| Unit-Tests: Registry mit eigenem Test-Schlüssel, Mutex, Log in Datei | 13 neue Tests |
+
+Ein echter Neustart des Laptops ist nicht Teil der Prüfung.
+
+## 7. Bekannte Grenzen
 
 - **Einwilligung:** Dictum erinnert beim Start daran (§ 201 StGB). Fragen musst du selbst.
 - **Kopfhörer und Bluetooth:** Aufgenommen wird der PC-Ton des Standard-Ausgabegeräts. Wechselt
