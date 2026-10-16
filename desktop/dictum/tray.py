@@ -116,6 +116,13 @@ class Tray:
             pystray.MenuItem("Snippets bearbeiten", lambda: app.open_snippets()),
             pystray.MenuItem("Mit Cloud abgleichen", lambda: meetings.sync_now()),
             pystray.Menu.SEPARATOR,
+            pystray.MenuItem(
+                "Mit Windows starten",
+                lambda: app.set("autostart", not app.get("autostart")),
+                checked=lambda _item: app.get("autostart"),
+            ),
+            pystray.MenuItem("Logdatei öffnen", lambda: app.open_log()),
+            pystray.Menu.SEPARATOR,
             pystray.MenuItem("Beenden", lambda: app.quit()),
         )
         self.hotkey_label = hotkey_label

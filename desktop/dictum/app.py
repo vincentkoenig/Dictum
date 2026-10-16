@@ -33,10 +33,12 @@ import numpy as np
 from .audio import Recorder
 from .cleanup import clean_text
 from .cloud_transcriber import OpenAITranscriber
+from . import autostart
 from .config import Settings
 from .hotkey import HotkeyListener, HotkeyStateMachine, hotkey_label
 from .inserter import insert_text
 from .llm import LLMError, create_provider
+from .logsetup import LOG_PATH
 from .meeting_controller import MeetingController
 from .overlay import Overlay
 from .transcriber import LocalTranscriber
@@ -119,6 +121,7 @@ class DictumApp:
             "engine": lambda: self.engine,
             "cleanup": lambda: self.cleanup_enabled,
             "provider": lambda: self.provider.name,
+            "autostart": autostart.is_enabled,
         }[setting]()
 
     def set(self, setting: str, value) -> None:
@@ -132,6 +135,8 @@ class DictumApp:
             self.cleanup_enabled = value
         elif setting == "provider":
             self.provider = create_provider(value, self.settings.cleanup)
+        elif setting == "autostart":
+            autostart.set_enabled(bool(value))
         log.info("Einstellung geändert: %s = %s", setting, value)
 
     def _refresh_tray(self) -> None:
@@ -146,6 +151,9 @@ class DictumApp:
 
     def open_dictionary(self) -> None:
         os.startfile(DICTIONARY_PATH)  # öffnet die Datei im Standard-Editor
+
+    def open_log(self) -> None:
+        os.startfile(LOG_PATH)
 
     def open_snippets(self) -> None:
         os.startfile(SNIPPETS_PATH)
