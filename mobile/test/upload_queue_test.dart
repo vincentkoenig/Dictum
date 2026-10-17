@@ -35,6 +35,9 @@ class FakeBackend implements QueueBackend {
 
   @override
   Future<void> finish(String recordingId, int chunkCount, double durationSeconds) async => _do('finish:$chunkCount');
+
+  @override
+  Future<void> discardRecording(String recordingId) async => _do('discard');
 }
 
 void main() {
@@ -92,6 +95,14 @@ void main() {
     final backend = FakeBackend();
     await Future.wait([queue.process(backend), queue.process(backend)]);
     expect(backend.log.where((e) => e.startsWith('upload')).length, 2);
+  });
+
+  test('eine verworfene Aufnahme wird beim Server gelöscht', () async {
+    await queue.addCreate('r1', 'meeting', 'de');
+    await queue.addDiscard('r1');
+    final backend = FakeBackend();
+    await queue.process(backend);
+    expect(backend.log, ['create:meeting', 'discard']);
   });
 
   test('hasPendingFor erkennt offene Schritte einer Aufnahme', () async {

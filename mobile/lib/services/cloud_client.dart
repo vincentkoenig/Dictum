@@ -55,7 +55,14 @@ abstract interface class SessionStore {
   Future<void> clear();
 }
 
-class DictumCloud implements QueueBackend {
+/// Was die Brücke zur Web-App für die Anmeldung braucht (in der App: DictumCloud).
+abstract interface class AuthBackend {
+  Future<void> signIn(String email, String password);
+  Future<void> signOut();
+  bool get hasSession;
+}
+
+class DictumCloud implements QueueBackend, AuthBackend {
   DictumCloud({
     required this.url,
     required this.key,
@@ -74,10 +81,12 @@ class DictumCloud implements QueueBackend {
   Session? _session;
 
   /// Hat die App eine Anmeldung, mit der sie hochladen darf?
+  @override
   bool get hasSession => _session != null;
 
   // --- Anmeldung ------------------------------------------------------------------------
 
+  @override
   Future<void> signIn(String email, String password) async {
     final res = await _http.post(
       Uri.parse('$url/auth/v1/token?grant_type=password'),
@@ -107,6 +116,7 @@ class DictumCloud implements QueueBackend {
     }
   }
 
+  @override
   Future<void> signOut() async {
     _session = null;
     await store.clear();
@@ -171,6 +181,7 @@ class DictumCloud implements QueueBackend {
 
   /// Legt die Aufnahme an. Mit fester ID wiederholbar: Gibt es sie schon, passiert nichts
   /// ("ignore-duplicates") – wichtig, weil die Warteschlange Schritte wiederholt.
+  @override
   Future<void> createRecording({required String id, required String template, required String language}) async {
     final res = await _authed((auth, _) => _http.post(
           Uri.parse('$url/rest/v1/recordings'),
@@ -186,6 +197,7 @@ class DictumCloud implements QueueBackend {
     _check(res, 'Aufnahme anlegen');
   }
 
+  @override
   Future<void> uploadChunk({
     required String recordingId,
     required int idx,
@@ -213,6 +225,7 @@ class DictumCloud implements QueueBackend {
     _check(row, 'Stück $idx eintragen');
   }
 
+  @override
   Future<void> transcribeChunk(String recordingId, int idx) async {
     final res = await _authed((auth, _) => _http
         .post(
@@ -225,6 +238,7 @@ class DictumCloud implements QueueBackend {
   }
 
   /// "Alle Stücke sind hochgeladen": setzt die Stückzahl und startet die Zusammenfassung.
+  @override
   Future<void> finish(String recordingId, int chunkCount, double durationSeconds) async {
     // Nur ändern, solange die Aufnahme noch "uploading" ist. Sonst würde ein wiederholter
     // Aufruf eine schon fertige Aufnahme zurück auf "transcribing" setzen.
@@ -241,5 +255,16 @@ class DictumCloud implements QueueBackend {
           body: jsonEncode({'recording_id': recordingId, 'force': false}),
         ));
     _check(summarize, 'Zusammenfassung starten');
+  }
+
+  /// Löscht eine Aufnahme samt Stücken ("on delete cascade" in der Datenbank). Ist sie schon
+  /// weg, antwortet der Server trotzdem mit Erfolg – der Schritt ist also wiederholbar.
+  @override
+  Future<void> discardRecording(String recordingId) async {
+    final res = await _authed((auth, _) => _http.delete(
+          Uri.parse('$url/rest/v1/recordings?id=eq.$recordingId'),
+          headers: {...auth, 'Prefer': 'return=minimal'},
+        ));
+    _check(res, 'Aufnahme verwerfen');
   }
 }

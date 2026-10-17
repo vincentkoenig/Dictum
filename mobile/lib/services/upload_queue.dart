@@ -30,6 +30,7 @@ abstract interface class QueueBackend {
   });
   Future<void> transcribeChunk(String recordingId, int idx);
   Future<void> finish(String recordingId, int chunkCount, double durationSeconds);
+  Future<void> discardRecording(String recordingId);
 }
 
 class QueueResult {
@@ -81,6 +82,9 @@ class UploadQueue {
 
   Future<void> addFinish(String recordingId, int chunkCount, double durationSeconds) =>
       _write({'type': 'finish', 'recording_id': recordingId, 'chunk_count': chunkCount, 'duration_seconds': durationSeconds});
+
+  /// Eine Aufnahme ohne brauchbares Audio (z. B. nur ein Antippen) wieder entfernen.
+  Future<void> addDiscard(String recordingId) => _write({'type': 'discard', 'recording_id': recordingId});
 
   Future<void> _write(Map<String, Object?> item, [String? name]) async {
     name ??= _newName();
@@ -142,6 +146,8 @@ class UploadQueue {
         await backend.transcribeChunk(id, idx);
       case 'finish':
         await backend.finish(id, item['chunk_count'] as int, (item['duration_seconds'] as num).toDouble());
+      case 'discard':
+        await backend.discardRecording(id);
     }
   }
 }
