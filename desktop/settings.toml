@@ -73,6 +73,13 @@ sync_minutes = 15
 # Adresse der Handy-/Web-App – dort werden fertige Meetings geöffnet
 web_url = "https://vincentkoenig.github.io/Dictum/"
 
+[history]
+# Lokaler Verlauf deiner Diktate (nur auf diesem PC, nie in der Cloud). Sichtbar im Dictum-Fenster.
+# Auf false stellen = es wird nichts gespeichert.
+enabled = true
+# Einträge, die älter sind, werden beim Start gelöscht (0 = nie löschen)
+keep_days = 90
+
 [feedback]
 # Kurzer Piepton bei Start und Stopp der Aufnahme
 sounds = true

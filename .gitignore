@@ -9,6 +9,7 @@ supabase/functions/.env
 desktop/dictionary.txt
 desktop/snippets.toml
 desktop/logs/
+desktop/data/
 
 # --- Python (Desktop-App) ---
 __pycache__/

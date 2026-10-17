@@ -72,6 +72,12 @@ class MeetingSettings:
 
 
 @dataclass
+class HistorySettings:
+    enabled: bool = True
+    keep_days: int = 90
+
+
+@dataclass
 class FeedbackSettings:
     sounds: bool = True
 
@@ -83,6 +89,7 @@ class Settings:
     cleanup: CleanupSettings = field(default_factory=CleanupSettings)
     cloud: CloudSettings = field(default_factory=CloudSettings)
     meeting: MeetingSettings = field(default_factory=MeetingSettings)
+    history: HistorySettings = field(default_factory=HistorySettings)
     feedback: FeedbackSettings = field(default_factory=FeedbackSettings)
 
 
@@ -99,6 +106,7 @@ def load_settings(path: Path = DEFAULT_PATH) -> Settings:
         cleanup=CleanupSettings(**data.get("cleanup", {})),
         cloud=CloudSettings(**data.get("cloud", {})),
         meeting=MeetingSettings(**data.get("meeting", {})),
+        history=HistorySettings(**data.get("history", {})),
         feedback=FeedbackSettings(**data.get("feedback", {})),
     )
     _validate(settings)
