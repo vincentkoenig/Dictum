@@ -9,7 +9,7 @@ des PCs sind nicht betroffen.
 
 Der Befehl sieht so aus:
 
-    "…\\.venv\\Scripts\\pythonw.exe" -X utf8 "…\\desktop\\dictum_tray.pyw"
+    "…\\.venv\\Scripts\\pythonw.exe" -X utf8 "…\\desktop\\dictum_tray.pyw" --background
 
 `pythonw.exe` ist Python OHNE Konsolenfenster (das "w" steht für "windowed"). Dadurch
 erscheint beim Anmelden kein schwarzes Fenster, nur das Tray-Symbol.
@@ -37,14 +37,22 @@ LAUNCHER = DESKTOP_DIR / "dictum_tray.pyw"
 
 def build_command(python_exe: str | Path, launcher: str | Path) -> str:
     """Setzt den Befehl zusammen. Die Anführungszeichen sind wichtig: Liegt das Projekt
-    in einem Ordner mit Leerzeichen, würde Windows den Pfad sonst zerschneiden."""
-    return f'"{python_exe}" -X utf8 "{launcher}"'
+    in einem Ordner mit Leerzeichen, würde Windows den Pfad sonst zerschneiden.
+
+    `--background`: Beim Anmelden soll Dictum still im Infobereich starten, ohne dass sich
+    das Fenster öffnet. Von Hand gestartet (Doppelklick) öffnet sich dagegen das Fenster."""
+    return f'"{python_exe}" -X utf8 "{launcher}" --background'
+
+
+def background_python() -> Path:
+    """Der Python-Interpreter ohne Konsolenfenster (pythonw.exe), falls vorhanden."""
+    python = Path(sys.executable)
+    pythonw = python.with_name("pythonw.exe")
+    return pythonw if pythonw.exists() else python
 
 
 def default_command() -> str:
-    python = Path(sys.executable)
-    pythonw = python.with_name("pythonw.exe")
-    return build_command(pythonw if pythonw.exists() else python, LAUNCHER)
+    return build_command(background_python(), LAUNCHER)
 
 
 def current_value(key_path: str = RUN_KEY) -> str | None:

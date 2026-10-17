@@ -20,7 +20,7 @@ def clean_registry():
 
 def test_befehl_hat_anfuehrungszeichen_fuer_pfade_mit_leerzeichen():
     cmd = autostart.build_command(r"C:\Mein Ordner\pythonw.exe", r"C:\Mein Ordner\dictum_tray.pyw")
-    assert cmd == r'"C:\Mein Ordner\pythonw.exe" -X utf8 "C:\Mein Ordner\dictum_tray.pyw"'
+    assert cmd == r'"C:\Mein Ordner\pythonw.exe" -X utf8 "C:\Mein Ordner\dictum_tray.pyw" --background'
 
 
 def test_standardbefehl_nutzt_pythonw_ohne_konsole():

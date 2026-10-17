@@ -2,21 +2,24 @@
 
 Wer läuft in welchem Thread?
 
-    Hauptthread ......... Overlay (tkinter muss im Hauptthread laufen)
+    Hauptthread ......... Qt: Overlay, Tray-Symbol, Fenster (Qt verlangt den Hauptthread)
     pynput-Thread ....... hört auf die Tastatur → ruft _start/_stop/_cancel auf
-    pystray-Thread ...... Tray-Symbol und Menü
     Lade-Thread ......... lädt einmalig das lokale Whisper-Modell
     Worker-Thread ....... transkribiert, bereinigt und fügt ein – eins nach dem anderen
+    Meeting-Thread ...... Upload der Meeting-Aufnahmen (siehe meeting_controller.py)
 
 Warum ein eigener Worker? Transkribieren + Bereinigen dauert 1–4 Sekunden. Würde das
 im Tastatur-Thread passieren, wäre die Tastatur in dieser Zeit blockiert. Stattdessen
 legen wir das Audio in eine Warteschlange und der Worker arbeitet sie ab.
 
+Die Threads reden nie direkt mit Qt-Objekten, sondern über deren thread-sichere Methoden
+(Overlay.show, Tray.notify …), die intern Signale senden (siehe gui/__init__.py).
+
 Der Weg eines Diktats im Worker (`_process`):
 
     Audio ─► Spracherkennung (lokal oder OpenAI) ─► Rohtext
           ─► Snippet? ── ja ─► Snippet-Text einfügen
-                     └─ nein ─► KI-Bereinigung (wenn an) ─► Text einfügen
+                     └─ nein ─► KI-Bereinigung (wenn an) ─► Text einfügen ─► Verlauf
 """
 
 from __future__ import annotations
@@ -24,25 +27,32 @@ from __future__ import annotations
 import logging
 import os
 import queue
+import subprocess
+import sys
 import threading
 import time
 import winsound
 
 import numpy as np
+from PySide6.QtCore import QObject, QTimer, Signal
+from PySide6.QtWidgets import QApplication
 
-from .audio import Recorder
+from . import autostart
+from .audio import Recorder, duration_seconds
 from .cleanup import clean_text
 from .cloud_transcriber import OpenAITranscriber
-from . import autostart
 from .config import Settings
+from .gui.icons import mic_icon
+from .gui.overlay import Overlay
+from .gui.tray import Tray
+from .gui.window import MainWindow
+from .history import History
 from .hotkey import HotkeyListener, HotkeyStateMachine, hotkey_label
 from .inserter import insert_text
 from .llm import LLMError, create_provider
 from .logsetup import LOG_PATH
 from .meeting_controller import MeetingController
-from .overlay import Overlay
 from .transcriber import LocalTranscriber
-from .tray import Tray
 from .vocabulary import (
     DICTIONARY_PATH,
     SNIPPETS_PATH,
@@ -55,9 +65,26 @@ from .vocabulary import (
 log = logging.getLogger(__name__)
 
 
+class _Bus(QObject):
+    """Signale, die aus jedem Thread gesendet werden dürfen, aber im Hauptthread ankommen."""
+
+    quit_requested = Signal()
+    show_window = Signal()
+
+
 class DictumApp:
-    def __init__(self, settings: Settings) -> None:
+    def __init__(self, settings: Settings, show_window: bool = True) -> None:
         self.settings = settings
+        self._show_window_on_start = show_window
+
+        # QApplication muss existieren, bevor irgendein Fenster oder Tray-Symbol entsteht.
+        # "QuitOnLastWindowClosed = False": Das Fenster zu schließen beendet Dictum NICHT,
+        # es läuft im Infobereich weiter.
+        self.qt = QApplication.instance() or QApplication(sys.argv[:1])
+        self.qt.setQuitOnLastWindowClosed(False)
+        self.qt.setApplicationName("Dictum")
+        self.qt.setWindowIcon(mic_icon())
+
         tr = settings.transcription
         self.recorder = Recorder()
 
@@ -69,6 +96,8 @@ class DictumApp:
 
         self.cleanup_enabled = settings.cleanup.enabled
         self.provider = create_provider(settings.cleanup.provider, settings.cleanup)
+        self.history = History()
+        self.hotkey_text = hotkey_label(settings.hotkey.keys)
 
         self.overlay = Overlay()
         self.machine = HotkeyStateMachine(
@@ -83,36 +112,70 @@ class DictumApp:
         # Menü. Deshalb über kleine Lambdas verbunden, die erst später aufgerufen werden.
         self.meetings = MeetingController(
             settings,
-            notify=lambda title, text: self.tray.notify(title, text),
+            notify=lambda title, text, click=None: self.tray.notify(title, text, click),
             on_change=self._refresh_tray,
         )
-        self.tray = Tray(self, hotkey_label(settings.hotkey.keys))
+        self._bus = _Bus()
+        self.tray = Tray(self, self.hotkey_text, open_window=self.show_window)
+        self.window = MainWindow(self)
+        self._bus.quit_requested.connect(self._do_quit)
+        self._bus.show_window.connect(self.window.show_and_raise)
         self._jobs: queue.Queue[np.ndarray | None] = queue.Queue()
+        self._ticker: QTimer | None = None
         ensure_user_files()
 
-    def run(self) -> None:
+    def run(self) -> int:
         threading.Thread(target=self._load_model, daemon=True).start()
         threading.Thread(target=self._worker, daemon=True).start()
         self.listener.start()
         self.tray.start()
         self.meetings.start_worker()
-        threading.Thread(target=self._tray_ticker, daemon=True).start()
+        removed = self.history.purge(self.settings.history.keep_days)
+        if removed:
+            log.info("Verlauf: %d alte Einträge gelöscht", removed)
+
+        # Während eines Meetings jede Sekunde die Laufzeit im Tray aktualisieren
+        self._ticker = QTimer()
+        self._ticker.timeout.connect(self._tick)
+        self._ticker.start(1000)
+
+        if self._show_window_on_start:
+            self.window.show_and_raise()
         log.info(
             "Dictum läuft. Spracherkennung: %s · KI-Bereinigung: %s (%s)",
             self.engine, "an" if self.cleanup_enabled else "aus", self.provider.name,
         )
-        self.overlay.run()  # blockiert bis zum Beenden
+        return self.qt.exec()  # blockiert bis qt.quit()
 
     def quit(self) -> None:
+        """Aus jedem Thread aufrufbar: Das eigentliche Beenden läuft im Hauptthread."""
+        self._bus.quit_requested.emit()
+
+    def _do_quit(self) -> None:
         log.info("Beende Dictum …")
         # Laufendes Meeting sauber abschließen – der Upload passiert beim nächsten Start
         self.meetings.stop()
         self.listener.stop()
         self._jobs.put(None)  # Signal an den Worker: aufhören
         self.tray.stop()
-        self.overlay.quit()
+        self.qt.quit()
 
-    # --- Einstellungen zur Laufzeit (vom Tray-Menü genutzt) ---------------------------
+    def show_window(self) -> None:
+        self._bus.show_window.emit()
+
+    def restart(self) -> None:
+        """Startet Dictum neu (z. B. nach einer geänderten Taste). Die neue Instanz bekommt
+        `--restart` und wartet, bis diese hier beendet ist und den Mutex freigibt."""
+        command = [str(autostart.background_python()), "-X", "utf8", str(autostart.LAUNCHER), "--restart"]
+        subprocess.Popen(
+            command,
+            creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
+            close_fds=True,
+        )
+        log.info("Neustart angefordert")
+        self.quit()
+
+    # --- Einstellungen zur Laufzeit (Tray-Menü und Fenster) ---------------------------
 
     def get(self, setting: str):
         return {
@@ -136,18 +199,36 @@ class DictumApp:
         elif setting == "provider":
             self.provider = create_provider(value, self.settings.cleanup)
         elif setting == "autostart":
-            autostart.set_enabled(bool(value))
+            if bool(value) != autostart.is_enabled():
+                autostart.set_enabled(bool(value))
         log.info("Einstellung geändert: %s = %s", setting, value)
 
-    def _refresh_tray(self) -> None:
-        self.tray.refresh(self.meetings.is_recording, self.meetings.elapsed)
+    def apply_settings(self, new: Settings) -> list[str]:
+        """Übernimmt neu gespeicherte Einstellungen. Das meiste wirkt sofort. Was einen Neustart
+        braucht (Taste, lokales Modell), wird als Liste zurückgegeben, damit das Fenster es sagen kann."""
+        old = self.settings
+        needs_restart = []
+        if new.hotkey.keys != old.hotkey.keys:
+            needs_restart.append("die Taste")
+        if new.transcription.model != old.transcription.model:
+            needs_restart.append("das lokale Modell")
 
-    def _tray_ticker(self) -> None:
-        """Aktualisiert während eines Meetings jede Sekunde die Laufzeit im Tray."""
-        while True:
-            time.sleep(1)
-            if self.meetings.is_recording:
-                self._refresh_tray()
+        # Laufende Bausteine auf die neuen Werte stellen …
+        self.machine.mode = new.hotkey.mode
+        self.machine.hold_threshold = new.hotkey.hold_threshold
+        self.local.language = self.cloud.language = new.transcription.language
+        self.local.fallback_language = new.transcription.fallback_language
+        self.engine = new.transcription.engine
+        self.cloud.model = new.transcription.openai_model
+        self.cleanup_enabled = new.cleanup.enabled
+        self.provider = create_provider(new.cleanup.provider, new.cleanup)
+        # … und das gemeinsame Einstellungs-Objekt aktualisieren, aus dem u. a. der
+        # MeetingController bei jedem Meeting liest. Es ist dasselbe Objekt wie bisher,
+        # deshalb sehen alle Beteiligten die neuen Werte sofort.
+        for section in ("hotkey", "transcription", "cleanup", "meeting", "history", "feedback"):
+            setattr(old, section, getattr(new, section))
+        log.info("Einstellungen übernommen (Neustart nötig für: %s)", ", ".join(needs_restart) or "nichts")
+        return needs_restart
 
     def open_dictionary(self) -> None:
         os.startfile(DICTIONARY_PATH)  # öffnet die Datei im Standard-Editor
@@ -157,6 +238,13 @@ class DictumApp:
 
     def open_snippets(self) -> None:
         os.startfile(SNIPPETS_PATH)
+
+    def _refresh_tray(self) -> None:
+        self.tray.refresh(self.meetings.is_recording, self.meetings.elapsed)
+
+    def _tick(self) -> None:
+        if self.meetings.is_recording:
+            self._refresh_tray()
 
     # --- Hotkey-Ereignisse (laufen im pynput-Thread, müssen schnell sein) ------------
 
@@ -189,7 +277,7 @@ class DictumApp:
             self.local.load()
         except Exception:
             log.exception("Whisper-Modell konnte nicht geladen werden")
-            self.overlay.flash("Modell-Fehler – siehe Konsole", seconds=5)
+            self.overlay.flash("Modell-Fehler – siehe Logdatei", seconds=5)
 
     def _worker(self) -> None:
         while True:
@@ -200,7 +288,7 @@ class DictumApp:
                 self._process(audio)
             except Exception:
                 log.exception("Fehler bei der Verarbeitung")
-                self.overlay.flash("Fehler – siehe Konsole")
+                self.overlay.flash("Fehler – siehe Logdatei")
 
     def _process(self, audio: np.ndarray) -> None:
         # Wörterbuch und Snippets bei jedem Diktat frisch lesen – so wirken Änderungen
@@ -216,12 +304,14 @@ class DictumApp:
             return
 
         snippet = match_snippet(raw, snippets)
+        cleaned = False
         if snippet is not None:
             log.info("Snippet erkannt: %r", raw)
             text = snippet
         elif self.cleanup_enabled:
             self.overlay.show("polishing")
             text = clean_text(raw, self.provider, dictionary)
+            cleaned = True
         else:
             text = raw
         t2 = time.perf_counter()
@@ -229,6 +319,16 @@ class DictumApp:
         log.info("Fertig: Erkennung %.1f s · Bereinigung %.1f s → %r", t1 - t0, t2 - t1, text)
         self.overlay.hide()
         insert_text(text)
+        self._remember(raw, text, audio, cleaned, snippet is not None)
+
+    def _remember(self, raw: str, text: str, audio: np.ndarray, cleaned: bool, snippet: bool) -> None:
+        """Eintrag im lokalen Verlauf – ein Fehler hier darf ein Diktat nie stören."""
+        if not self.settings.history.enabled:
+            return
+        try:
+            self.history.add(raw, text, duration_seconds(audio), self.engine, cleaned, snippet)
+        except Exception:
+            log.exception("Verlauf konnte nicht gespeichert werden")
 
     def _transcribe(self, audio: np.ndarray, dictionary: list[str]) -> str:
         self.local.vocabulary = self.cloud.vocabulary = dictionary

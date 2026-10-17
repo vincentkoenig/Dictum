@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import ctypes
 import ctypes.wintypes as wt
+import time
 
 ERROR_ALREADY_EXISTS = 183
 DEFAULT_NAME = "Local\\DictumDesktop"
@@ -32,11 +33,22 @@ kernel32.CloseHandle.restype = wt.BOOL
 
 
 class SingleInstance:
-    def __init__(self, name: str = DEFAULT_NAME) -> None:
-        ctypes.set_last_error(0)
-        self._handle = kernel32.CreateMutexW(None, False, name)
-        # Wichtig: GetLastError direkt nach dem Aufruf lesen, bevor etwas anderes es überschreibt
-        self.already_running = ctypes.get_last_error() == ERROR_ALREADY_EXISTS
+    def __init__(self, name: str = DEFAULT_NAME, wait_seconds: float = 0.0) -> None:
+        """`wait_seconds`: Beim Neustart (Einstellungen → "Neu starten") startet die neue Instanz,
+        während die alte noch aufräumt. Dann warten wir kurz, bis der Mutex frei wird, statt
+        sofort aufzugeben."""
+        deadline = time.monotonic() + wait_seconds
+        while True:
+            ctypes.set_last_error(0)
+            handle = kernel32.CreateMutexW(None, False, name)
+            # Wichtig: GetLastError direkt nach dem Aufruf lesen, bevor etwas anderes es überschreibt
+            already = ctypes.get_last_error() == ERROR_ALREADY_EXISTS
+            if not already or time.monotonic() >= deadline:
+                break
+            kernel32.CloseHandle(handle)
+            time.sleep(0.25)
+        self._handle = handle
+        self.already_running = already
 
     def release(self) -> None:
         if self._handle:

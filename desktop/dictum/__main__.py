@@ -3,6 +3,7 @@
 import argparse
 import ctypes
 import logging
+import sys
 
 from . import autostart
 from .config import load_env, load_settings
@@ -16,11 +17,16 @@ def main() -> None:
     parser = argparse.ArgumentParser(prog="dictum")
     parser.add_argument("--quiet", action="store_true",
                         help="bei einem zweiten Start keine Meldung anzeigen (für Tests/Skripte)")
+    parser.add_argument("--background", action="store_true",
+                        help="still im Infobereich starten, ohne das Fenster zu öffnen (Autostart)")
+    parser.add_argument("--restart", action="store_true",
+                        help="Neustart: wartet, bis die alte Instanz beendet ist")
     args = parser.parse_args()
 
     setup_logging()
 
-    instance = SingleInstance()
+    # Nach einem Neustart läuft die alte Instanz noch kurz: bis zu 20 s auf sie warten
+    instance = SingleInstance(wait_seconds=20 if args.restart else 0)
     if instance.already_running:
         log.warning("Dictum läuft bereits – dieser Start wird beendet.")
         if not args.quiet:
@@ -34,11 +40,8 @@ def main() -> None:
             )
         return
 
-    # Scharfe Schrift auf hochauflösenden Bildschirmen (sonst skaliert Windows unscharf)
-    try:
-        ctypes.windll.shcore.SetProcessDpiAwareness(1)
-    except (AttributeError, OSError):
-        pass
+    # Hinweis: Eine DPI-Einstellung wie früher ist nicht mehr nötig. Qt skaliert auf
+    # hochauflösenden Bildschirmen selbst.
 
     load_env()  # API-Keys aus .env laden, bevor die KI-Clients erzeugt werden
     settings = load_settings()
@@ -48,9 +51,11 @@ def main() -> None:
     # ohnehin gleich wieder endet, weil schon eine Instanz läuft
     from .app import DictumApp
 
-    log.info("Dictum startet")
-    DictumApp(settings).run()
+    log.info("Dictum startet%s", " (im Hintergrund)" if args.background else "")
+    code = DictumApp(settings, show_window=not args.background).run()
     log.info("Dictum beendet")
+    instance.release()
+    sys.exit(code)
 
 
 if __name__ == "__main__":

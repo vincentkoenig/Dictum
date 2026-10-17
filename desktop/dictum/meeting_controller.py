@@ -38,10 +38,10 @@ WORKER_INTERVAL = 30  # Sekunden zwischen zwei Upload-Versuchen ohne neuen Anlas
 
 
 class MeetingController:
-    def __init__(self, settings: Settings, notify: Callable[[str, str], None],
+    def __init__(self, settings: Settings, notify: Callable[..., None],
                  on_change: Callable[[], None]) -> None:
         self.settings = settings
-        self.notify = notify          # (Titel, Text) → Windows-Benachrichtigung
+        self.notify = notify          # (Titel, Text, Klick-Aktion=None) → Windows-Benachrichtigung
         self.on_change = on_change    # Tray-Menü/Symbol aktualisieren
         self.queue = UploadQueue()
         self._recorder: MeetingRecorder | None = None
@@ -186,12 +186,12 @@ class MeetingController:
             if rec["status"] == "done":
                 self._watch.discard(rid)
                 self.last_recording_id = rid
-                self.notify("Zusammenfassung fertig", rec.get("title") or "Meeting")
+                self.notify("Zusammenfassung fertig", rec.get("title") or "Meeting", self.open_last)
                 self.on_change()
             elif rec["status"] == "error":
                 self._watch.discard(rid)
                 self.last_recording_id = rid
-                self.notify("Meeting: Fehler", rec.get("error") or "Unbekannter Fehler")
+                self.notify("Meeting: Fehler", rec.get("error") or "Unbekannter Fehler", self.open_last)
                 self.on_change()
             else:
                 # Wartet noch auf die Zusammenfassung → bald wieder nachsehen
