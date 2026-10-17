@@ -1,5 +1,6 @@
 import { type FormEvent, useState } from "react";
 import { supabase } from "../lib/supabase";
+import { isNative, sendToNative } from "../lib/native";
 import { Icon } from "../components/ui";
 
 export function Login() {
@@ -13,7 +14,12 @@ export function Login() {
     setBusy(true);
     setError("");
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    // Bei Erfolg meldet onAuthStateChange (App.tsx) den Login – nichts weiter zu tun
+    // Bei Erfolg meldet onAuthStateChange (App.tsx) den Login
+    // In der Android-App meldet sich zusätzlich der native Aufnahme-Teil mit denselben Daten an.
+    // Er braucht eine EIGENE Sitzung: Refresh-Tokens ändern sich bei jeder Erneuerung, und zwei
+    // Nutzer desselben Tokens würden sich gegenseitig die Sitzung entziehen. Gespeichert wird dort
+    // nur das eigene Token, nie das Passwort.
+    if (!error && isNative()) sendToNative({ type: "credentials", email, password });
     if (error) setError(error.message === "Invalid login credentials" ? "E-Mail oder Passwort falsch." : error.message);
     setBusy(false);
   }

@@ -14,6 +14,8 @@ import { navigate } from "../lib/route";
 import { TEMPLATE_LABELS, type Template } from "../lib/types";
 import { clock, Icon, TopBar } from "../components/ui";
 import { LevelMeter } from "../components/LevelMeter";
+import { isNative } from "../lib/native";
+import { NativeRecord } from "./NativeRecord";
 
 type State = "setup" | "recording" | "paused" | "saving";
 
@@ -29,7 +31,13 @@ function kickQueue() {
   window.dispatchEvent(new Event("dictum:queue"));
 }
 
+/** In der Android-App nimmt der native Teil auf (läuft auch bei gesperrtem Bildschirm weiter),
+ *  im Browser und in der installierten PWA nimmt die Web-App selbst auf. */
 export function Record() {
+  return isNative() ? <NativeRecord /> : <BrowserRecord />;
+}
+
+function BrowserRecord() {
   const [state, setState] = useState<State>("setup");
   const [template, setTemplate] = useState<Template>("meeting");
   const [seconds, setSeconds] = useState(0);
