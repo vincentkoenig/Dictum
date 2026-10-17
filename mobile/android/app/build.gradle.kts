@@ -24,7 +24,8 @@ android {
         applicationId = "app.dictum.dictum_mobile"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        // Android 10: Der Opus-Encoder des Pakets `record` braucht mindestens API 29
+        minSdk = 29
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName

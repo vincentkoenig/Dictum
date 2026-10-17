@@ -1,16 +1,13 @@
-# dictum_mobile
+# mobile/
 
-Dictum fuer Android: Aufnahme im Hintergrund, Oberflaeche aus der Web-App
+Android-App (Flutter): zeigt die Web-App in einer WebView und nimmt nativ im Hintergrund auf,
+auch bei gesperrtem Bildschirm.
 
-## Getting Started
+Ausführliche Erklärung: [docs/mobile.md](../docs/mobile.md)
 
-This project is a starting point for a Flutter application.
-
-A few resources to get you started if this is your first Flutter project:
-
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+```powershell
+flutter test
+flutter analyze
+flutter build apk --debug
+flutter run
+```

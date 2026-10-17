@@ -4,4 +4,7 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Nur im Entwicklungs-Build: erlaubt http://localhost (Entwicklungsserver der Web-App über
+         `adb reverse`). Im Release-Build sind unverschlüsselte Verbindungen verboten. -->
+    <application android:usesCleartextTraffic="true" tools:ignore="MissingApplicationIcon" xmlns:tools="http://schemas.android.com/tools"/>
 </manifest>

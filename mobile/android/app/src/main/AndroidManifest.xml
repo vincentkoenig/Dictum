@@ -1,8 +1,27 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
+    <!-- Aufnahme bei ausgeschaltetem Bildschirm: Android erlaubt den Mikrofonzugriff im
+         Hintergrund nur einem Dienst im Vordergrund vom Typ "microphone", der gestartet wurde,
+         während die App sichtbar war (siehe lib/services/background_service.dart). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"/>
+    <!-- Ab Android 13 nötig, damit die Aufnahme-Benachrichtigung samt Stopp-Knopf sichtbar ist -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <application
-        android:label="dictum_mobile"
+        android:label="Dictum"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <!-- Name ist von flutter_foreground_task vorgegeben. stopWithTask: Die Aufnahme läuft im
+             Hauptteil der App. Ein Dienst, der das Wegwischen der App überlebt, würde nur das
+             Mikrofon belegen, ohne aufzunehmen. -->
+        <service
+            android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
+            android:foregroundServiceType="microphone"
+            android:stopWithTask="true"
+            android:exported="false" />
         <activity
             android:name=".MainActivity"
             android:exported="true"
