@@ -68,7 +68,7 @@ der Anbieter (Stand Oktober 2026, siehe unten).
 |---|---|---|
 | 0–5 | Grundgerüst, Diktat, KI-Text, Backend, Handy-App, Meetings am PC | ✅ |
 | 6 | Dauerbetrieb und Fenster am PC: Autostart, Einzelinstanz, Logdatei, Qt-Oberfläche, Verlauf, Einstellungen | ✅ (Installer zurückgestellt) |
-| 7 | Android-App mit Hintergrundaufnahme (Flutter-Hülle mit der Web-App darin) | 🔨 |
+| 7 | Android-App mit Hintergrundaufnahme (Flutter-Hülle mit der Web-App darin) | 🔧 Prototyp gebaut, Test am Handy offen |
 | 8 | Wispr-Funktionen am PC | 🔨 |
 | 9 | Aufnahmen auf Pocket/Plaud-Niveau | 🔨 |
 | 10 | Wissen und Automatisierung | 🔨 |

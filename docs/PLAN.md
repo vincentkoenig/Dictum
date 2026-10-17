@@ -12,7 +12,7 @@ Jede Phase besteht aus mehreren kleinen Commits und bekommt eine Erklärung in `
 | 4 | **Handy-PWA** – Login, Diktat + Kopieren, Gespräche aufnehmen, Offline-Warteschlange, Liste/Suche, Detailansicht, Markdown-Export | ✅ |
 | 5 | **Meetings am PC** – Mikrofon + PC-Ton aufnehmen, Upload nach Supabase, Wörterbuch/Snippets abgleichen | ✅ |
 | 6 | **Dauerbetrieb und Fenster am PC** – Autostart, Einzelinstanz, Logdatei, Qt-Oberfläche (Overlay, Tray, Fenster), lokaler Verlauf, Einstellungen speichern | ✅ (Installer zurückgestellt) |
-| 7 | **Android-App mit Hintergrundaufnahme** – Flutter-Hülle mit der Web-App darin, Mikrofon-Dienst mit Stopp-Knopf, Teilen-Ziel für Audio | ⏳ |
+| 7 | **Android-App mit Hintergrundaufnahme** – Flutter-Hülle mit der Web-App darin, Mikrofon-Dienst mit Stopp-Knopf, Teilen-Ziel für Audio | 🔧 Prototyp gebaut, Test am Handy offen |
 | 8 | **Wispr-Funktionen am PC** – Command Mode, Stile pro App und Kontext, Flüstermodus, Freihand, Lern-Wörterbuch, Statistik | ⏳ |
 | 9 | **Aufnahmen auf Pocket/Plaud-Niveau** – Live-Transkript, Markieren mit Foto, Sprecher, Vorlagen, Mindmap, Übersetzen, Tags, Import, Export | ⏳ |
 | 10 | **Wissen und Automatisierung** – Fragen an alle Aufnahmen, Kalender, Aufgaben, Auto-Flow, Follow-up, MCP | ⏳ |
