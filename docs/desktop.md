@@ -13,12 +13,12 @@ egal ob Word, Browser, Outlook oder Slack. Dieses Dokument erklärt, wie das fun
         │
         ▼
  audio.py       öffnet das Mikrofon, sammelt Audio (16 kHz mono)
- overlay.py     zeigt "● Hört zu …"
+ gui/overlay.py zeigt "● Hört zu …"
         │
  Du lässt los
         ▼
  audio.py       liefert das Audio als Zahlenreihe (numpy-Array)
- overlay.py     zeigt "◐ Transkribiert …"
+ gui/overlay.py zeigt "◐ Transkribiert …"
         │
         ▼  (Warteschlange → Worker-Thread)
  transcriber.py faster-whisper wandelt Audio in Text (lokal, ~2 s)
@@ -29,7 +29,7 @@ egal ob Word, Browser, Outlook oder Slack. Dieses Dokument erklärt, wie das fun
         │ nein
         ▼
  cleanup.py     KI bereinigt: Füllwörter, Korrekturen, Satzzeichen, Listen
- overlay.py     zeigt "✦ Formuliert …"
+ gui/overlay.py zeigt "✦ Formuliert …"
         │
         ▼
  inserter.py    Text → Zwischenablage → Strg+V → alte Zwischenablage zurück
@@ -51,10 +51,13 @@ egal ob Word, Browser, Outlook oder Slack. Dieses Dokument erklärt, wie das fun
 | `vocabulary.py` | Wörterbuch & Snippets | Persönliche Dateien, Vorlagen im Repo |
 | `hotkey.py` | Halten/Antippen erkennen | Zustandsmaschine, getrennt von der Tastatur |
 | `inserter.py` | Text einfügen | Zwischenablage + simuliertes Strg+V |
-| `overlay.py` | Statusanzeige | Fenster, das nie den Fokus nimmt |
-| `tray.py` | Symbol in der Taskleiste | Alle Schalter zur Laufzeit |
-| `app.py` | Verbindet alles | Threads + Warteschlange |
-| `__main__.py` | Einstiegspunkt | `python -m dictum` |
+| `gui/overlay.py` | Statusanzeige | Fenster, das nie den Fokus nimmt |
+| `gui/tray.py` | Symbol im Infobereich | Menü wird vor dem Aufklappen synchronisiert |
+| `gui/window.py` | Dictum-Fenster | Reiter Start, Verlauf, Einstellungen, Info |
+| `history.py` | Lokaler Verlauf | SQLite-Datei, nur auf diesem PC |
+| `settings_io.py` | Einstellungen speichern | tomlkit erhält die Kommentare |
+| `app.py` | Verbindet alles | Threads, Signale, Warteschlange |
+| `__main__.py` | Einstiegspunkt | `python -m dictum`, Flags `--background`, `--restart` |
 
 ## 3. Die wichtigsten Konzepte
 
@@ -103,19 +106,28 @@ Mehrere Dinge passieren gleichzeitig, deshalb laufen sie in eigenen **Threads**:
 
 | Thread | Macht |
 |---|---|
-| Hauptthread | Overlay (tkinter verlangt den Hauptthread) |
+| Hauptthread | Qt: Overlay, Tray-Symbol, Fenster (Qt verlangt den Hauptthread) |
 | pynput | Hört auf die Tastatur |
-| pystray | Tray-Symbol |
 | Lade-Thread | Lädt einmalig das Whisper-Modell |
-| Worker | Transkribiert und fügt ein |
+| Worker | Transkribiert, bereinigt, fügt ein |
+| Meeting-Thread | Lädt Meeting-Aufnahmen hoch, wartet auf die Zusammenfassung |
 
 Die Threads reden über **Warteschlangen** (`queue.Queue`) miteinander: Der Tastatur-Thread
 legt das Audio hinein und ist sofort wieder frei; der Worker holt es ab und arbeitet es ab.
 
+**Mit Qt gilt zusätzlich:** Qt-Objekte dürfen nur im Hauptthread verändert werden. Alle anderen
+Threads rufen deshalb nur Methoden wie `overlay.show(…)` oder `tray.notify(…)` auf, die intern ein
+**Signal** senden. Qt reiht Signale aus fremden Threads automatisch in die Warteschlange des
+Hauptthreads ein, dort werden sie abgearbeitet. So muss man sich um Sperren nicht selbst kümmern.
+
 ### Das Overlay darf den Fokus nicht stehlen
 
 Würde das Overlay beim Erscheinen zum aktiven Fenster, landete das Strg+V im Overlay statt
-in deinem Dokument. Deshalb bekommt es über die Windows-API das Attribut `WS_EX_NOACTIVATE`.
+in deinem Dokument. In Qt gibt es dafür die Fenster-Eigenschaft `WindowDoesNotAcceptFocus`
+(Windows: `WS_EX_NOACTIVATE`) und das Attribut `WA_ShowWithoutActivating`. Zusätzlich reagiert die
+Pille nicht auf Mausklicks (`WA_TransparentForMouseEvents`), ein Klick geht an das Fenster dahinter.
+Geprüft habe ich das nicht nur im Code, sondern am echten Fenster: Das Vordergrundfenster bleibt
+unverändert, und die Fensterflags sind gesetzt.
 
 ### Schnell genug ohne Grafikkarte
 
@@ -300,10 +312,12 @@ Windows führt beim Anmelden alle Befehle aus, die in der Registry unter
 Eintrag `Dictum` ein:
 
 ```
-"…\desktop\.venv\Scripts\pythonw.exe" -X utf8 "…\desktop\dictum_tray.pyw"
+"…\desktop\.venv\Scripts\pythonw.exe" -X utf8 "…\desktop\dictum_tray.pyw" --background
 ```
 
 - **`pythonw.exe`** ist Python ohne Konsolenfenster. Beim Anmelden erscheint nur das Tray-Symbol.
+- **`--background`**: Beim Anmelden öffnet sich kein Fenster, Dictum startet still im Infobereich.
+  Startet man es von Hand, öffnet sich das Dictum-Fenster.
 - **`dictum_tray.pyw`** ergänzt den Suchpfad selbst, denn Windows startet Run-Einträge nicht im
   Projektordner.
 - Ein-/ausschalten: Tray → **Mit Windows starten** (Haken). Es braucht keine Administratorrechte,
@@ -339,7 +353,78 @@ wird `stderr` dann auf einen Papierkorb umgeleitet.
 
 Ein echter Neustart des Laptops ist nicht Teil der Prüfung.
 
-## 7. Bekannte Grenzen
+## 7. Das Dictum-Fenster und Qt (Phase 6)
+
+Bisher gab es nur ein Tray-Symbol und das Overlay beim Sprechen. Jetzt gibt es ein Fenster:
+**Linksklick auf das Symbol** oder Tray → **Dictum öffnen**. Das **X** schließt nur das Fenster,
+Dictum läuft im Infobereich weiter (beim ersten Mal sagt es das per Hinweis). Nur Tray →
+**Beenden** beendet das Programm.
+
+| Reiter | Inhalt |
+|---|---|
+| **Start** | Status („Bereit – Strg rechts halten und sprechen“, „Meeting läuft – 02:05“), Meeting starten und beenden, Einrichtungs-Check (Mikrofon, Schlüssel, Konto, Autostart), „Heute: 12 Diktate, 140 Wörter“ |
+| **Verlauf** | Deine letzten Diktate mit Suche. Doppelklick kopiert einen Eintrag. |
+| **Einstellungen** | Taste, Bedienung, Sprache, Spracherkennung, Modell, KI, Meetings, Verlauf, Autostart |
+| **Info** | Version, Dateipfade, Logdatei, Wörterbuch und Snippets öffnen |
+
+Der Einrichtungs-Check löst ein Problem aus dem Alltag: Wenn „nichts passiert“, sieht man hier sofort,
+ob es am Mikrofon, an einem fehlenden Schlüssel oder am Konto liegt.
+
+### Warum von tkinter und pystray auf Qt gewechselt wurde
+
+tkinter und Qt wollen beide den **Hauptthread** für ihre Ereignisschleife, und in einem Prozess
+geht nur eines von beiden. Für ein echtes Fenster braucht es Qt. Deshalb sind Overlay und
+Tray-Symbol auf Qt umgezogen, wie in Khutba-Translation. Nebenbei wurde manches besser:
+
+| | vorher (tkinter, pystray) | jetzt (Qt) |
+|---|---|---|
+| Hochauflösende Bildschirme | Skalierung von Hand umrechnen | automatisch |
+| Overlay mit zwei Monitoren | immer Hauptbildschirm | dort, wo der Mauszeiger ist |
+| Tray-Menü | Häkchen und Untermenüs mit Eigenheiten | normales Menü, vor dem Aufklappen synchronisiert |
+| Benachrichtigung | nur Anzeige | anklickbar („Zusammenfassung fertig“ öffnet das Meeting) |
+| Abhängigkeiten | tkinter, pystray, Pillow | PySide6-Essentials |
+
+### Einstellungen speichern: sofort oder nach Neustart?
+
+Das Fenster schreibt in `settings.toml`. Weil Python TOML nur lesen kann, benutzt es **tomlkit**,
+das die Datei ändert und dabei alle Kommentare erhält. Vor dem Überschreiben wird der neue Inhalt mit
+derselben Prüfung wie beim Start getestet. Ein ungültiger Wert lässt die alte Datei unberührt.
+
+Danach übernimmt `DictumApp.apply_settings()` die neuen Werte:
+
+| Wirkt sofort | Braucht einen Neustart |
+|---|---|
+| Bedienung, Sprache, Spracherkennung, KI an/aus, KI-Anbieter, Töne, Meeting-Optionen, Verlauf, Autostart | die **Taste** (der Tastatur-Hörer wurde mit ihr gestartet) und das **lokale Modell** (es ist geladen) |
+
+Für den Neustart gibt es „Speichern und neu starten“. Die neue Instanz startet mit `--restart`
+und **wartet bis zu 20 Sekunden**, bis die alte beendet ist und den Mutex freigibt. Ohne das Warten
+würde sie sich als „zweite Instanz“ sofort wieder beenden.
+
+### Der lokale Verlauf
+
+Nach jedem Diktat speichert `history.py` Rohtext und eingefügten Text in einer SQLite-Datei
+(`desktop/data/history.db`, in `.gitignore`). Es bleibt **nur auf diesem PC**: Es geht nie in die Cloud
+und erscheint nicht in der Handy-App. Man kann ihn komplett abschalten (`[history] enabled = false`),
+die Aufbewahrung begrenzen (`keep_days`, Standard 90 Tage, ältere Einträge löscht Dictum beim Start)
+oder im Fenster alles löschen.
+
+Ein Detail aus der Praxis: Die Suche nutzt SQL `LIKE`, bei dem `%` und `_` Platzhalter sind. Sucht
+man nach „50%“, würde sonst alles gefunden. `history.py` entwertet diese Zeichen mit `\`.
+
+### Wie ich es geprüft habe
+
+| Test | Ergebnis |
+|---|---|
+| 90 Tests, davon 22 für die Oberfläche (Qt-Plugin `offscreen`, ohne sichtbare Fenster) | alle grün |
+| Overlay am echten Fenster: Vordergrundfenster, Fensterflags, Aufruf aus fremdem Thread | Fokus bleibt, Flags gesetzt, Signal kommt an |
+| `scripts/dictate_e2e.py`: Sprachausgabe → echtes Whisper → echtes Claude → Verlauf | Diktat in 3,9 s verarbeitet, eingefügter Text steht im Verlauf |
+| Echter Start über `pythonw`, Fenster per `WM_CLOSE` schließen | Fenster verschwindet, Prozess läuft weiter |
+| Alter Autostart-Eintrag ohne `--background` | korrigiert sich beim Start selbst |
+
+Nicht geprüft habe ich das Klicken im Tray-Menü und den Neustart-Knopf an der echten Oberfläche.
+Dafür gibt es Tests der Menü-Logik und von `apply_settings`, aber keinen Klick auf dem Bildschirm.
+
+## 8. Bekannte Grenzen
 
 - **Einwilligung:** Dictum erinnert beim Start daran (§ 201 StGB). Fragen musst du selbst.
 - **Kopfhörer und Bluetooth:** Aufgenommen wird der PC-Ton des Standard-Ausgabegeräts. Wechselt
@@ -352,4 +437,5 @@ Ein echter Neustart des Laptops ist nicht Teil der Prüfung.
 - Die Zwischenablage wird nur wiederhergestellt, wenn sie vorher **Text** enthielt.
 - In Programmen, die mit Administratorrechten laufen, kann Windows das simulierte Strg+V
   blockieren.
-- Einstellungen aus dem Tray-Menü gelten nur bis zum Beenden. Dauerhaft ändert man sie in `settings.toml`.
+- Einstellungen aus dem **Tray-Menü** gelten nur bis zum Beenden. Dauerhaft speichert man sie im Reiter
+  **Einstellungen** (oder in `settings.toml`).
