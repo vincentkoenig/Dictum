@@ -11,7 +11,14 @@ Jede Phase besteht aus mehreren kleinen Commits und bekommt eine Erklärung in `
 | 3 | **Supabase-Backend** – Schema, Login, Audio-Speicher, Edge Functions `transcribe`, `summarize` & `dictate`, Zusammenfassungs-Vorlagen | ✅ |
 | 4 | **Handy-PWA** – Login, Diktat + Kopieren, Gespräche aufnehmen, Offline-Warteschlange, Liste/Suche, Detailansicht, Markdown-Export | ✅ |
 | 5 | **Meetings am PC** – Mikrofon + PC-Ton aufnehmen, Upload nach Supabase, Wörterbuch/Snippets abgleichen | ✅ |
-| 6 | **Extras** (einzeln wählbar) – Sprechererkennung, „Frag deine Aufnahmen“, Mindmap, Stil pro App | 💡 |
+| 6 | **Dauerbetrieb und Fenster am PC** – Autostart, Einzelinstanz, Logdatei, Qt-Oberfläche (Overlay, Tray, Fenster), lokaler Verlauf, Einstellungen speichern | ✅ (Installer zurückgestellt) |
+| 7 | **Android-App mit Hintergrundaufnahme** – Flutter-Hülle mit der Web-App darin, Mikrofon-Dienst mit Stopp-Knopf, Teilen-Ziel für Audio | ⏳ |
+| 8 | **Wispr-Funktionen am PC** – Command Mode, Stile pro App und Kontext, Flüstermodus, Freihand, Lern-Wörterbuch, Statistik | ⏳ |
+| 9 | **Aufnahmen auf Pocket/Plaud-Niveau** – Live-Transkript, Markieren mit Foto, Sprecher, Vorlagen, Mindmap, Übersetzen, Tags, Import, Export | ⏳ |
+| 10 | **Wissen und Automatisierung** – Fragen an alle Aufnahmen, Kalender, Aufgaben, Auto-Flow, Follow-up, MCP | ⏳ |
+| 11 | **Android-Extras** – Blase in Textfeldern, Kachel, Widget, Telefonat-Modus | ⏳ |
+
+Die einzelnen Funktionen und was sich aus welchem Vorbild überschneidet, steht in [FEATURES.md](FEATURES.md).
 
 ## Was wir uns von den Vorbildern abschauen
 
