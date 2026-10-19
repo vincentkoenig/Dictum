@@ -12,14 +12,14 @@ der Anbieter (Stand Oktober 2026, siehe unten).
 |---|---|---|
 | Diktat in jede App, Satzzeichen, Füllwörter, Selbstkorrektur, Listen | ✅ | Phase 1–2 |
 | Hotkey halten oder antippen, **jede Taste frei wählbar** (auch Kombinationen, Maustasten), Esc bricht ab, letztes Diktat erneut einfügen/kopieren | ✅ | Phase 8; Doppeltipp als Freihand-Modus: 🔨 8 |
-| Eigenes Wörterbuch, Snippets, Abgleich mit dem Handy | ✅ | Phase 2, 5 |
+| Eigenes Wörterbuch und Snippets (Editor im Fenster), Abgleich mit dem Handy | ✅ | Phase 2, 5, 8 |
 | Fenster, Verlauf mit Suche, Tagesstatistik | ✅ | Phase 6 |
 | **Command Mode**: Text markieren, Befehl sprechen („kürzer“); ohne Markierung Text erzeugen; Esc bricht ab, Strg+Z macht rückgängig | 🔨 8 | eigener Hotkey |
 | Stile pro App (formell/locker) und Kontext (Namen aus Fenster und Textfeld) | 🔨 8 | Windows-UI-Automation |
 | Flüstermodus | 🔨 8 | automatische Pegelanhebung |
 | Wörterbuch lernt aus deinen Korrekturen, Branchenlisten | 🔨 8 | ein gemeinsames Wörterbuch |
 | Entwickler-Modus (CamelCase, Dateinamen), Privatmodus | 🔨 8 | |
-| Verlauf und Statistik (Tempo, Top-Apps), Kosten pro Aufnahme | 🔨 8 | Verlauf selbst ✅ |
+| Verlauf und Statistik (Tempo, Serie, Top-Apps), Kosten pro Aufnahme | ✅ | Phase 8 |
 | Android: schwebende **Blase** in Textfeldern (Tipp- und Halte-Modus) | 🔨 11 | Bedienungshilfe-Dienst |
 | iPhone-Tastatur | ➖ | Handy ist Android |
 | Team: geteilte Wörterbücher, Nutzungs-Dashboards | ➖ | Einzelnutzer |

@@ -423,3 +423,31 @@ def test_leerer_snippet_wird_abgelehnt(app, qapp, tmp_path):
     tab.trigger.setText("nur Auslöser")
     tab.apply_snippet()
     assert "leer" in tab.message.text() and not (tmp_path / "s.toml").exists()
+
+
+def test_statistik_tab_zeigt_zahlen(app, qapp):
+    from dictum.gui.stats_tab import de, duration_text
+
+    app.history.add("a", "eins zwei drei vier", 6.0, "local", True, False, app="Chrome", cost=0.002)
+    app.history.add("b", "fünf sechs", 3.0, "local", False, False, app="Chrome")
+    window = MainWindow(app)
+    tab = window.stats_tab
+    tab.refresh()
+    assert tab.words.value.text() == "6" and tab.dictations.value.text() == "2"
+    assert tab.wpm.value.text() == "40"                       # 6 Wörter in 9 s
+    assert tab.apps.rowCount() == 1 and tab.apps.item(0, 0).text() == "Chrome"
+    assert tab.chart.days[-1][1] == 6
+    assert de(12345.6) == "12.346" and de(0.5, 2) == "0,50"
+    assert duration_text(0.2) == "unter 1 Min." and duration_text(30) == "30 Min." and duration_text(150) == "2,5 Std."
+
+
+def test_statistik_ohne_verlauf(app, qapp):
+    app.settings.history.enabled = False
+    window = MainWindow(app)
+    window.stats_tab.refresh()
+    assert "ausgeschaltet" in window.stats_tab.note.text()
+
+
+def test_statistik_leer(app, qapp):
+    window = MainWindow(app)
+    assert "Noch keine Diktate" in window.stats_tab.note.text()

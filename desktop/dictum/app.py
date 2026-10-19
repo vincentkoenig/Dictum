@@ -38,7 +38,7 @@ import pyperclip
 from PySide6.QtCore import QObject, QTimer, Signal
 from PySide6.QtWidgets import QApplication
 
-from . import autostart, shortcuts
+from . import autostart, context, costs, shortcuts
 from .audio import Recorder, duration_seconds
 from .cleanup import clean_text
 from .cloud_transcriber import OpenAITranscriber
@@ -123,7 +123,9 @@ class DictumApp:
         self.window = MainWindow(self)
         self._bus.quit_requested.connect(self._do_quit)
         self._bus.show_window.connect(self.window.show_and_raise)
-        self._jobs: queue.Queue[np.ndarray | None] = queue.Queue()
+        self._jobs: queue.Queue[tuple[np.ndarray, context.ActiveWindow | None] | None] = queue.Queue()
+        self._target: context.ActiveWindow | None = None  # Fenster, in das gerade diktiert wird
+        self._stt_model: str | None = None                # Cloud-Modell des letzten Diktats (None = lokal)
         self._ticker: QTimer | None = None
         ensure_user_files()
 
@@ -314,6 +316,7 @@ class DictumApp:
     # --- Hotkey-Ereignisse (laufen im pynput-Thread, müssen schnell sein) ------------
 
     def _start(self) -> None:
+        self._target = context.active_window()  # merken, bevor das Overlay oder ein Piepton stört
         try:
             self.recorder.start()
         except Exception:
@@ -328,7 +331,7 @@ class DictumApp:
         self._beep(660)
         ready = self.engine == "openai" or self.local.is_ready
         self.overlay.show("transcribing" if ready else "loading")
-        self._jobs.put(audio)
+        self._jobs.put((audio, self._target))
 
     def _cancel(self) -> None:
         self.recorder.stop()
@@ -346,16 +349,16 @@ class DictumApp:
 
     def _worker(self) -> None:
         while True:
-            audio = self._jobs.get()
-            if audio is None:
+            job = self._jobs.get()
+            if job is None:
                 return
             try:
-                self._process(audio)
+                self._process(*job)
             except Exception:
                 log.exception("Fehler bei der Verarbeitung")
                 self.overlay.flash("Fehler – siehe Logdatei")
 
-    def _process(self, audio: np.ndarray) -> None:
+    def _process(self, audio: np.ndarray, target: context.ActiveWindow | None = None) -> None:
         # Wörterbuch und Snippets bei jedem Diktat frisch lesen – so wirken Änderungen
         # an den Dateien sofort, ohne Neustart (die Dateien sind winzig)
         dictionary = load_dictionary()
@@ -385,22 +388,33 @@ class DictumApp:
         self.overlay.hide()
         self._last_text = text
         insert_text(text)
-        self._remember(raw, text, audio, cleaned, snippet is not None)
+        self._remember(raw, text, audio, cleaned, snippet is not None, target)
 
-    def _remember(self, raw: str, text: str, audio: np.ndarray, cleaned: bool, snippet: bool) -> None:
+    def _remember(self, raw: str, text: str, audio: np.ndarray, cleaned: bool, snippet: bool,
+                  target: context.ActiveWindow | None = None) -> None:
         """Eintrag im lokalen Verlauf – ein Fehler hier darf ein Diktat nie stören."""
         if not self.settings.history.enabled:
             return
         try:
-            self.history.add(raw, text, duration_seconds(audio), self.engine, cleaned, snippet)
+            duration = duration_seconds(audio)
+            cost = costs.estimate(
+                stt_model=self._stt_model, duration=duration,
+                cleanup_model=getattr(self.provider, "model", None) if cleaned else None,
+                raw=raw, text=text,
+            )
+            self.history.add(raw, text, duration, self.engine, cleaned, snippet,
+                             app=target.app if target else "", cost=cost)
         except Exception:
             log.exception("Verlauf konnte nicht gespeichert werden")
 
     def _transcribe(self, audio: np.ndarray, dictionary: list[str]) -> str:
         self.local.vocabulary = self.cloud.vocabulary = dictionary
+        self._stt_model = None
         if self.engine == "openai":
             try:
-                return self.cloud.transcribe(audio)
+                text = self.cloud.transcribe(audio)
+                self._stt_model = self.cloud.model
+                return text
             except LLMError as e:
                 # Cloud nicht verfügbar → lokal weitermachen statt das Diktat zu verlieren
                 log.warning("%s – nutze lokales Whisper", e)

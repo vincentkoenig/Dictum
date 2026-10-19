@@ -17,8 +17,8 @@ from __future__ import annotations
 
 import sqlite3
 from contextlib import closing
-from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from dataclasses import dataclass, field
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from .config import DESKTOP_DIR
@@ -35,10 +35,35 @@ create table if not exists dictations (
     engine     text,                   -- local / openai
     cleaned    integer not null default 0,   -- KI-Bereinigung benutzt?
     snippet    integer not null default 0,   -- war es ein Snippet?
-    words      integer not null default 0
+    words      integer not null default 0,
+    app        text,                   -- Programm, in das diktiert wurde (z. B. "Chrome")
+    cost       real                    -- geschätzte Kosten in US-Dollar (siehe costs.py)
 );
 create index if not exists dictations_created on dictations (created_at desc);
 """
+
+
+# Spalten, die erst später dazukamen: Ältere Datenbanken bekommen sie beim Öffnen nachgerüstet
+MIGRATIONS = {"app": "text", "cost": "real"}
+
+
+@dataclass
+class Stats:
+    """Alles, was der Reiter "Statistik" anzeigt."""
+
+    dictations: int = 0
+    words: int = 0
+    speaking_seconds: float = 0.0
+    wpm: float | None = None            # Wörter pro Minute gesprochen
+    streak: int = 0                     # Tage in Folge mit mindestens einem Diktat
+    best_streak: int = 0
+    saved_minutes: float = 0.0          # gegenüber Tippen mit TYPING_WPM
+    cost_usd: float = 0.0
+    days: list[tuple[date, int]] = field(default_factory=list)          # letzte Tage: Wörter
+    top_apps: list[tuple[str, int, int]] = field(default_factory=list)  # (Programm, Wörter, Diktate)
+
+
+TYPING_WPM = 40  # durchschnittliche Tippgeschwindigkeit, Grundlage für "gesparte Zeit"
 
 
 @dataclass
@@ -65,6 +90,10 @@ class History:
         path.parent.mkdir(parents=True, exist_ok=True)
         with closing(self._connect()) as db:
             db.executescript(SCHEMA)
+            have = {row["name"] for row in db.execute("pragma table_info(dictations)")}
+            for column, kind in MIGRATIONS.items():
+                if column not in have:
+                    db.execute(f"alter table dictations add column {column} {kind}")
 
     def _connect(self) -> sqlite3.Connection:
         db = sqlite3.connect(self.path, timeout=10)
@@ -72,13 +101,13 @@ class History:
         return db
 
     def add(self, raw: str, text: str, duration: float | None = None, engine: str = "",
-            cleaned: bool = False, snippet: bool = False) -> None:
+            cleaned: bool = False, snippet: bool = False, app: str = "", cost: float | None = None) -> None:
         words = len(text.split())
         with closing(self._connect()) as db, db:  # "with db" = Transaktion, committet am Ende
             db.execute(
-                "insert into dictations (created_at, raw, text, duration, engine, cleaned, snippet, words) "
-                "values (?, ?, ?, ?, ?, ?, ?, ?)",
-                (_now(), raw, text, duration, engine, int(cleaned), int(snippet), words),
+                "insert into dictations (created_at, raw, text, duration, engine, cleaned, snippet, words, app, cost) "
+                "values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (_now(), raw, text, duration, engine, int(cleaned), int(snippet), words, app or None, cost),
             )
 
     def recent(self, limit: int = 200, query: str = "") -> list[Entry]:
@@ -117,3 +146,55 @@ class History:
                 "select count(*), coalesce(sum(words), 0) from dictations where created_at >= ?", (since,)
             ).fetchone()
         return row[0], row[1]
+
+    def stats(self, days: int = 14, today: date | None = None) -> Stats:
+        """Auswertung über den ganzen Verlauf. `today` gibt es für Tests."""
+        today = today or datetime.now().astimezone().date()
+        with closing(self._connect()) as db:
+            rows = db.execute("select created_at, words, duration, app, cost from dictations").fetchall()
+
+        stats = Stats()
+        per_day: dict[date, int] = {}
+        apps: dict[str, list[int]] = {}
+        timed_words = 0
+        for row in rows:
+            day = _to_local(row["created_at"]).date()
+            words = row["words"] or 0
+            per_day[day] = per_day.get(day, 0) + words
+            stats.dictations += 1
+            stats.words += words
+            stats.cost_usd += row["cost"] or 0.0
+            if row["duration"]:
+                stats.speaking_seconds += row["duration"]
+                timed_words += words
+            if row["app"]:
+                entry = apps.setdefault(row["app"], [0, 0])
+                entry[0] += words
+                entry[1] += 1
+
+        if stats.speaking_seconds > 0:
+            stats.wpm = timed_words / (stats.speaking_seconds / 60)
+        stats.saved_minutes = max(0.0, stats.words / TYPING_WPM - stats.speaking_seconds / 60)
+        stats.streak, stats.best_streak = _streaks(set(per_day), today)
+        stats.days = [(today - timedelta(days=n), per_day.get(today - timedelta(days=n), 0))
+                      for n in range(days - 1, -1, -1)]
+        stats.top_apps = sorted(((name, w, c) for name, (w, c) in apps.items()), key=lambda t: -t[1])[:8]
+        return stats
+
+
+def _streaks(days: set[date], today: date) -> tuple[int, int]:
+    """(aktuelle Serie, längste Serie) in Tagen. Die aktuelle Serie bricht nicht ab, nur weil heute
+    noch nicht diktiert wurde: Sie zählt dann ab gestern."""
+    if not days:
+        return 0, 0
+    best = run = 0
+    previous = None
+    for day in sorted(days):
+        run = run + 1 if previous is not None and (day - previous).days == 1 else 1
+        best = max(best, run)
+        previous = day
+    start = today if today in days else today - timedelta(days=1)
+    current = 0
+    while start - timedelta(days=current) in days:
+        current += 1
+    return current, best

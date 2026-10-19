@@ -57,6 +57,10 @@ egal ob Word, Browser, Outlook oder Slack. Dieses Dokument erklärt, wie das fun
 | `gui/tray.py` | Symbol im Infobereich | Menü wird vor dem Aufklappen synchronisiert |
 | `gui/window.py` | Dictum-Fenster | Reiter Start, Verlauf, Einstellungen, Info |
 | `shortcuts.py` | Desktop-Symbol, Startmenü | `.lnk` mit Symbol und AppUserModelID |
+| `context.py` | Aktives Programm | Vordergrundfenster → Prozessname (Win32 + psutil) |
+| `costs.py` | Kostenschätzung | Preise je Modell, Token grob aus der Textlänge |
+| `gui/stats_tab.py` | Reiter Statistik | Kennzahlen, Säulendiagramm, Top-Programme |
+| `gui/dictionary_tab.py` | Reiter Wörterbuch | Wörter und Snippets bearbeiten, sofort gespeichert |
 | `history.py` | Lokaler Verlauf | SQLite-Datei, nur auf diesem PC |
 | `settings_io.py` | Einstellungen speichern | tomlkit erhält die Kommentare |
 | `app.py` | Verbindet alles | Threads, Signale, Warteschlange |
@@ -495,6 +499,31 @@ Dafür gibt es Tests der Menü-Logik und von `apply_settings`, aber keinen Klick
   und ein Anheften bleibt zugeordnet.
 - **Ordner:** Der Desktop liegt oft in OneDrive. Deshalb fragt Dictum Windows (`SHGetFolderPath`), statt
   `~/Desktop` zu raten. Die Tests legen Verknüpfungen nur in Wegwerf-Ordnern an.
+
+### Reiter Wörterbuch und Statistik
+
+**Wörterbuch** (`gui/dictionary_tab.py`): Eigene Wörter und Textbausteine werden im Fenster hinzugefügt,
+geändert und gelöscht, ohne Textdatei. Gespeichert wird sofort in dieselben Dateien wie bisher
+(`dictionary.txt`, `snippets.toml`), und weil `_process` sie bei jedem Diktat neu liest, wirkt es gleich.
+Einleitende Kommentare der Dateien bleiben erhalten; geschrieben wird erst in eine Nebendatei und dann
+umbenannt, damit eine halb geschriebene Datei nie die alte ersetzt. Doppelte Wörter und doppelte Auslöser
+werden abgelehnt (Groß-/Kleinschreibung egal).
+
+**Statistik** (`gui/stats_tab.py`, `History.stats()`): Alles wird aus dem lokalen Verlauf gerechnet.
+
+| Kennzahl | Berechnung |
+|---|---|
+| Wörter, Diktate | Summen über den Verlauf |
+| Wörter pro Minute | Wörter ÷ gesprochene Minuten (Länge der Aufnahmen, mit Pausen) |
+| Tage in Folge | aufeinanderfolgende Tage mit Diktat; bricht nicht ab, nur weil heute noch nichts diktiert wurde |
+| gespart | Wörter ÷ 40 (Tippen mit 40 Wörtern/Min.) minus gesprochene Zeit |
+| Cloud-Kosten | Schätzung je Diktat (`costs.py`): Audio-Minuten bei OpenAI-Erkennung plus Token der Bereinigung |
+| Top-Programme | Wörter und Diktate je Programm |
+
+Das **Programm** merkt sich `context.active_window()` beim Start der Aufnahme: Vordergrundfenster →
+Prozess → Name. Programme mit Administratorrechten verweigern den Namen, dann bleibt er leer. Der Name
+steht nur im lokalen Verlauf. Ältere Datenbanken bekommen die neuen Spalten `app` und `cost` beim Öffnen
+nachgerüstet (`MIGRATIONS`), alte Einträge haben dann kein Programm.
 
 ## 8. Bekannte Grenzen
 

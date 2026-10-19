@@ -35,6 +35,5 @@ OPENAI_STT_MODELS = {
 OPENAI_CLEANUP_MODELS = {
     "gpt-5-nano": "gpt-5-nano (am billigsten)",
     "gpt-5-mini": "gpt-5-mini (genauer)",
-    "gpt-4.1-mini": "gpt-4.1-mini (ohne Nachdenken, schnell)",
 }
 MODEL_CHOICES = ["tiny", "base", "small", "medium", "large-v3-turbo"]
