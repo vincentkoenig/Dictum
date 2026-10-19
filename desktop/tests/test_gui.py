@@ -499,3 +499,64 @@ def test_lernen_ein_und_ausschalten(app, qapp, tmp_path):
     assert load_settings(path).dictionary.auto_learn is True and "an" in tab.message.text()
     tab.auto_learn.setChecked(False)
     assert load_settings(path).dictionary.auto_learn is False
+
+
+# --- Flow Bar -------------------------------------------------------------------------
+
+def test_flow_bar_ruhe_hover_status(qapp):
+    overlay = Overlay(flow_bar=True, hint="Klicken zum Diktieren")
+    assert overlay.mode == "idle"                              # immer sichtbar: schmaler Strich
+
+    overlay._on_hover(True)
+    assert overlay.mode == "hover" and overlay._pill.text.text() == "Klicken zum Diktieren"
+    assert overlay._pill.clickable
+    overlay._on_hover(False)
+    assert overlay.mode == "idle"
+
+    overlay._on_show("listening")
+    assert overlay.mode == "status" and overlay._pill.clickable    # Klick beendet die Aufnahme
+    overlay._on_show("transcribing")
+    assert not overlay._pill.clickable                             # Verarbeitung: nur Anzeige
+    overlay._hide_now()
+    assert overlay.mode == "idle"                                  # zurück zum Strich, nicht weg
+
+
+def test_flow_bar_aus_verhaelt_sich_wie_frueher(qapp):
+    overlay = Overlay(flow_bar=False)
+    assert overlay.mode == "hidden"
+    overlay._on_show("listening")
+    assert overlay.mode == "status"
+    overlay._hide_now()
+    assert overlay.mode == "hidden"
+    overlay.set_flow_bar(True)
+    assert overlay.mode == "idle"
+    overlay.set_flow_bar(False)
+    assert overlay.mode == "hidden"
+
+
+def test_flow_bar_klick_wird_gemeldet(qapp):
+    overlay = Overlay(flow_bar=True)
+    clicks = []
+    overlay.clicked.connect(lambda: clicks.append(1))
+    overlay._pill.clickable = True
+    from PySide6.QtCore import QPointF, Qt
+    from PySide6.QtGui import QMouseEvent
+    event = QMouseEvent(QMouseEvent.Type.MouseButtonPress, QPointF(5, 5), QPointF(5, 5),
+                        Qt.MouseButton.LeftButton, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier)
+    overlay._pill.mousePressEvent(event)
+    assert clicks == [1]
+
+
+def test_flow_bar_und_ton_einstellungen_werden_gespeichert(app, qapp, tmp_path):
+    path = tmp_path / "settings.toml"
+    shutil.copy(DEFAULT_PATH, path)
+    window = MainWindow(app)
+    tab = window.settings_tab
+    assert not tab.sounds.isChecked() and not tab.sound_volume.isEnabled() and tab.flow_bar.isChecked()
+    tab.sounds.setChecked(True)
+    assert tab.sound_volume.isEnabled()
+    tab.sound_volume.setValue(35)
+    tab.flow_bar.setChecked(False)
+    assert tab.save(path=path)
+    saved = load_settings(path)
+    assert saved.feedback.sounds and saved.feedback.sound_volume == 35 and saved.ui.flow_bar is False

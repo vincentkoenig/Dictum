@@ -332,7 +332,11 @@ class SettingsTab(QWidget):
         open_env.clicked.connect(self.app.open_env)
         reload_env = QPushButton("Schlüssel neu laden")
         reload_env.clicked.connect(self._reload_keys)
-        self.sounds = QCheckBox("Piepton bei Start und Ende der Aufnahme")
+        self.sounds = QCheckBox("Töne bei Start und Ende der Aufnahme")
+        self.sound_volume = QSpinBox()
+        self.sound_volume.setRange(1, 100)
+        self.sound_volume.setSuffix(" %")
+        self.flow_bar = QCheckBox("Flow Bar anzeigen (Blase unten in der Bildschirmmitte)")
         self.sys_audio = QCheckBox("PC-Ton aufnehmen (Teams, Zoom …)")
         self.chunk = QSpinBox()
         self.chunk.setRange(1, 10)
@@ -360,6 +364,8 @@ class SettingsTab(QWidget):
         form.addRow("KI-Anbieter:", self.provider)
         form.addRow("OpenAI-Modell (Bereinigung):", self.openai_cleanup)
         form.addRow(self.sounds)
+        form.addRow("Lautstärke der Töne:", self.sound_volume)
+        form.addRow(self.flow_bar)
         form.addRow("Befehls-Taste (Text umschreiben):", self.command)
         form.addRow("Letztes Diktat einfügen:", self.paste_last)
         form.addRow("Letztes Diktat kopieren:", self.copy_last)
@@ -386,6 +392,7 @@ class SettingsTab(QWidget):
         pform.addRow(self.desktop_shortcut)
         pform.addRow(self.start_menu_shortcut)
 
+        self.sounds.toggled.connect(self.sound_volume.setEnabled)
         self.save_btn = QPushButton("Speichern")
         self.save_btn.clicked.connect(lambda: self.save(restart=False))
         self.restart_btn = QPushButton("Speichern und neu starten")
@@ -429,6 +436,9 @@ class SettingsTab(QWidget):
         self.cleanup.setChecked(bool(app.get("cleanup")))
         _select(self.provider, app.get("provider"))
         self.sounds.setChecked(s.feedback.sounds)
+        self.sound_volume.setValue(s.feedback.sound_volume)
+        self.sound_volume.setEnabled(s.feedback.sounds)
+        self.flow_bar.setChecked(s.ui.flow_bar)
         self.sys_audio.setChecked(s.meeting.include_system_audio)
         self.chunk.setValue(int(s.meeting.chunk_minutes))
         self.history_on.setChecked(s.history.enabled)
@@ -473,7 +483,8 @@ class SettingsTab(QWidget):
             },
             "meeting": {"include_system_audio": self.sys_audio.isChecked(), "chunk_minutes": self.chunk.value()},
             "history": {"enabled": self.history_on.isChecked(), "keep_days": self.keep_days.value()},
-            "feedback": {"sounds": self.sounds.isChecked()},
+            "feedback": {"sounds": self.sounds.isChecked(), "sound_volume": self.sound_volume.value()},
+            "ui": {"flow_bar": self.flow_bar.isChecked()},
         }
 
     def save(self, restart: bool = False, path=DEFAULT_PATH) -> bool:

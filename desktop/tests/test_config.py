@@ -60,3 +60,14 @@ def test_zeitlimit_und_fluestermodus(tmp_path):
     f.write_text("[hotkey]\nmax_minutes = 0\n[transcription]\nwhisper_mode = false\n", encoding="utf-8")
     s = load_settings(f)
     assert s.hotkey.max_minutes == 0 and s.transcription.whisper_mode is False
+
+
+def test_toene_standardmaessig_aus_und_flow_bar_an(tmp_path):
+    import pytest
+
+    f = tmp_path / "s.toml"
+    s = load_settings(f)
+    assert s.feedback.sounds is False and s.feedback.sound_volume == 20 and s.ui.flow_bar is True
+    f.write_text("[feedback]\nsound_volume = 101\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="sound_volume"):
+        load_settings(f)

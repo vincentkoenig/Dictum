@@ -130,5 +130,10 @@ window_title = true   # Titel des Fensters, z. B. "Re: Angebot Müller GmbH – 
 field_text = false    # Text im Eingabefeld rund um die Schreibstelle (Passwortfelder nie)
 
 [feedback]
-# Kurzer Piepton bei Start und Stopp der Aufnahme
-sounds = true
+# Sanfter Ton bei Start und Stopp der Aufnahme (Standard: aus) und seine Lautstärke in Prozent
+sounds = false
+sound_volume = 20
+
+[ui]
+# Flow Bar: kleine Blase unten in der Bildschirmmitte. Maus darüber = größer, Klick = diktieren.
+flow_bar = true

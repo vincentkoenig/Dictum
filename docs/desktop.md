@@ -54,7 +54,8 @@ egal ob Word, Browser, Outlook oder Slack. Dieses Dokument erklärt, wie das fun
 | `gui/hotkey_field.py` | „Taste wählen“ | Dialog: Taste drücken statt aus einer Liste wählen |
 | `inserter.py` | Text einfügen | Zwischenablage + simuliertes Strg+V |
 | `clipboard.py` | Zwischenablage | alle Formate sichern/zurücklegen, Diktat nicht im Win+V-Verlauf |
-| `gui/overlay.py` | Statusanzeige | Fenster, das nie den Fokus nimmt |
+| `gui/overlay.py` | Flow Bar | Blase unten in der Mitte: Ruhe, Hover, Status, Klick = diktieren |
+| `sounds.py` | Töne | eigener sanfter Ton in einstellbarer Lautstärke |
 | `gui/tray.py` | Symbol im Infobereich | Menü wird vor dem Aufklappen synchronisiert |
 | `gui/window.py` | Dictum-Fenster | Reiter Start, Verlauf, Einstellungen, Info |
 | `shortcuts.py` | Desktop-Symbol, Startmenü | `.lnk` mit Symbol und AppUserModelID |
@@ -505,6 +506,30 @@ Dafür gibt es Tests der Menü-Logik und von `apply_settings`, aber keinen Klick
   und ein Anheften bleibt zugeordnet.
 - **Ordner:** Der Desktop liegt oft in OneDrive. Deshalb fragt Dictum Windows (`SHGetFolderPath`), statt
   `~/Desktop` zu raten. Die Tests legen Verknüpfungen nur in Wegwerf-Ordnern an.
+
+### Flow Bar und Töne (`gui/overlay.py`, `sounds.py`)
+
+**Flow Bar:** Die kleine Blase unten in der Bildschirmmitte ist jetzt dauerhaft da (wie bei Wispr Flow),
+solange sie in den Einstellungen eingeschaltet ist.
+
+| Zustand | Aussehen | Klick |
+|---|---|---|
+| Ruhe | schmaler dunkler Strich | |
+| Maus darüber | Blase wird größer: „Klicken zum Diktieren · Strg rechts“ | startet ein Diktat |
+| Aufnahme | „● Hört zu …“ (bzw. „Befehl – sprich …“) | beendet die Aufnahme |
+| Verarbeitung, Meldung | „Transkribiert …“, „Formuliert …“, „Nichts erkannt“ … | nur Anzeige |
+
+Ein Klick verhält sich wie zweimaliges Antippen der Taste: `HotkeyStateMachine.start_toggled()` startet im
+Zustand `TOGGLED`, `finish()` beendet. Dadurch kommen Mausklick und Tastatur nicht durcheinander. Die Blase
+**stiehlt nie den Fokus**: Das Fenster hat `WindowDoesNotAcceptFocus` (unter Windows `WS_EX_NOACTIVATE`), also
+bleibt auch nach einem Klick das Programm aktiv, in das der Text soll. Mit Flow Bar sitzt die Blase auf dem
+Hauptbildschirm; ohne sie erscheint sie wie früher nur während einer Aufnahme und dort, wo der Mauszeiger ist.
+Aus- und einschalten: Einstellungen → „Flow Bar anzeigen“ (wirkt sofort).
+
+**Töne:** Standardmäßig **aus**. Sind sie an, spielt `sounds.py` einen selbst erzeugten Ton: eine kurze
+Sinuswelle (70 ms) mit weichen Flanken, damit nichts knackt, deren Lautstärke einstellbar ist (Standard 20 %).
+Der alte Windows-Piepton (`winsound.Beep`) ließ sich nicht leiser stellen, deshalb wurde er ersetzt. Der Ton
+liegt als WAV im Arbeitsspeicher und läuft in einem eigenen Thread, damit die Aufnahme nicht wartet.
 
 ### Reiter Wörterbuch und Statistik
 

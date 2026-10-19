@@ -31,14 +31,13 @@ import subprocess
 import sys
 import threading
 import time
-import winsound
 
 import numpy as np
 import pyperclip
 from PySide6.QtCore import QObject, QTimer, Signal
 from PySide6.QtWidgets import QApplication
 
-from . import autostart, commands, context, costs, learn, levels, shortcuts, styles
+from . import autostart, commands, context, costs, learn, levels, shortcuts, sounds, styles
 from .audio import Recorder, duration_seconds
 from .cleanup import clean_text
 from .cloud_transcriber import OpenAITranscriber
@@ -48,7 +47,7 @@ from .gui.overlay import Overlay
 from .gui.tray import Tray
 from .gui.window import MainWindow
 from .history import History
-from .hotkey import HotkeyListener, HotkeyStateMachine, hotkey_label
+from .hotkey import HotkeyListener, HotkeyStateMachine, State, hotkey_label
 from .inserter import copy_selection, insert_text
 from .llm import LLMError, create_provider
 from .logsetup import LOG_PATH
@@ -104,7 +103,8 @@ class DictumApp:
         self.history = History()
         self.hotkey_text = hotkey_label(settings.hotkey.keys)
 
-        self.overlay = Overlay()
+        self.overlay = Overlay(flow_bar=settings.ui.flow_bar, hint=self._bar_hint())
+        self.overlay.clicked.connect(self.bar_clicked)
         self.machine = HotkeyStateMachine(
             on_start=self._start,
             on_stop=self._stop,
@@ -240,6 +240,8 @@ class DictumApp:
         self.listener.set_keys(new.hotkey.keys)
         self._set_extra_hotkeys(new.hotkey)
         self.hotkey_text = hotkey_label(new.hotkey.keys)
+        self.overlay.set_hint(self._bar_hint())
+        self.overlay.set_flow_bar(new.ui.flow_bar)
         self.tray.set_hotkey_label(self.hotkey_text)
         self.machine.mode = self.command_machine.mode = new.hotkey.mode
         self.machine.hold_threshold = self.command_machine.hold_threshold = new.hotkey.hold_threshold
@@ -255,7 +257,7 @@ class DictumApp:
         # MeetingController bei jedem Meeting liest. Es ist dasselbe Objekt wie bisher,
         # deshalb sehen alle Beteiligten die neuen Werte sofort.
         for section in ("hotkey", "transcription", "cleanup", "meeting", "history", "dictionary", "styles",
-                        "context", "feedback"):
+                        "context", "feedback", "ui"):
             setattr(old, section, getattr(new, section))
         log.info("Einstellungen übernommen (Neustart nötig für: %s)", ", ".join(needs_restart) or "nichts")
         return needs_restart
@@ -539,5 +541,16 @@ class DictumApp:
 
     def _beep(self, frequency: int) -> None:
         if self.settings.feedback.sounds:
-            # Beep blockiert für die Tondauer → in eigenem Thread
-            threading.Thread(target=winsound.Beep, args=(frequency, 60), daemon=True).start()
+            sounds.play(frequency, self.settings.feedback.sound_volume)
+
+    def _bar_hint(self) -> str:
+        return f"Klicken zum Diktieren  ·  {self.hotkey_text}"
+
+    def bar_clicked(self) -> None:
+        """Klick auf die Flow Bar: Diktat starten bzw. beenden (wie zweimal die Taste antippen)."""
+        for machine in (self.machine, self.command_machine):
+            if machine.state == State.TOGGLED:
+                machine.finish()
+                return
+        if self.machine.state == State.IDLE and self.command_machine.state == State.IDLE:
+            self.machine.start_toggled()

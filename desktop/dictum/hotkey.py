@@ -89,6 +89,12 @@ class HotkeyStateMachine:
             self.state = State.WAIT_RELEASE
             self.on_cancel()
 
+    def start_toggled(self) -> None:
+        """Aufnahme per Mausklick starten (Flow Bar): läuft weiter, bis man erneut klickt oder tippt."""
+        if self.state == State.IDLE:
+            self.state = State.TOGGLED
+            self.on_start()
+
     def finish(self) -> None:
         """Aufnahme von außen beenden (z. B. Zeitlimit), als hätte man die Taste losgelassen/angetippt.
         Der Zustand wird mitgeführt, damit der nächste Tastendruck wieder eine neue Aufnahme startet."""

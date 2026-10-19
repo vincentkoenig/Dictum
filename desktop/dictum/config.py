@@ -135,7 +135,13 @@ class ContextSettings:
 
 @dataclass
 class FeedbackSettings:
-    sounds: bool = True
+    sounds: bool = False        # Töne bei Start und Ende der Aufnahme (Standard: aus)
+    sound_volume: int = 20      # Lautstärke in Prozent, wenn Töne an sind
+
+
+@dataclass
+class UiSettings:
+    flow_bar: bool = True       # dauerhaft sichtbare Blase unten in der Bildschirmmitte
 
 
 @dataclass
@@ -150,6 +156,7 @@ class Settings:
     styles: StylesSettings = field(default_factory=StylesSettings)
     context: ContextSettings = field(default_factory=ContextSettings)
     feedback: FeedbackSettings = field(default_factory=FeedbackSettings)
+    ui: UiSettings = field(default_factory=UiSettings)
 
 
 def load_settings(path: Path = DEFAULT_PATH) -> Settings:
@@ -170,6 +177,7 @@ def load_settings(path: Path = DEFAULT_PATH) -> Settings:
         styles=StylesSettings(**data.get("styles", {})),
         context=ContextSettings(**data.get("context", {})),
         feedback=FeedbackSettings(**data.get("feedback", {})),
+        ui=UiSettings(**data.get("ui", {})),
     )
     _validate(settings)
     return settings
@@ -203,6 +211,8 @@ def _validate(settings: Settings) -> None:
     for exe, style in st.apps.items():
         if style not in STYLES:
             raise ValueError(f"Ungültiger Stil '{style}' für {exe}. Erlaubt: {set(STYLES)}")
+    if not 0 <= settings.feedback.sound_volume <= 100:
+        raise ValueError("feedback.sound_volume muss zwischen 0 und 100 liegen.")
     if settings.dictionary.learn_delay < 1:
         raise ValueError("dictionary.learn_delay muss mindestens 1 Sekunde sein.")
     if hk.max_minutes < 0:

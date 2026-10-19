@@ -251,3 +251,13 @@ def test_finish_ohne_aufnahme_tut_nichts():
     sm, ev = make()
     sm.finish()
     assert ev == []
+
+
+def test_start_per_mausklick_laeuft_weiter_bis_zum_naechsten_klick():
+    sm, ev = make()
+    sm.start_toggled()
+    assert ev == ["start"] and sm.state == State.TOGGLED
+    sm.start_toggled()                 # läuft schon: nichts doppelt starten
+    assert ev == ["start"]
+    sm.finish()                        # zweiter Klick
+    assert ev == ["start", "stop"] and sm.state == State.IDLE
