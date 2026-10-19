@@ -185,7 +185,7 @@ class DictumApp:
     def restart(self) -> None:
         """Startet Dictum neu (z. B. nach einer geänderten Taste). Die neue Instanz bekommt
         `--restart` und wartet, bis diese hier beendet ist und den Mutex freigibt."""
-        command = [str(autostart.background_python()), "-X", "utf8", str(autostart.LAUNCHER), "--restart"]
+        command = [str(autostart.background_python()), *autostart.launch_args(), "--restart"]
         subprocess.Popen(
             command,
             creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,

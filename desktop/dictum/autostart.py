@@ -26,7 +26,7 @@ import sys
 import winreg
 from pathlib import Path
 
-from .config import DESKTOP_DIR
+from .config import DESKTOP_DIR, FROZEN
 
 log = logging.getLogger(__name__)
 
@@ -35,24 +35,34 @@ VALUE_NAME = "Dictum"
 LAUNCHER = DESKTOP_DIR / "dictum_tray.pyw"
 
 
-def build_command(python_exe: str | Path, launcher: str | Path) -> str:
+def build_command(python_exe: str | Path, launcher: str | Path | None) -> str:
     """Setzt den Befehl zusammen. Die Anführungszeichen sind wichtig: Liegt das Projekt
     in einem Ordner mit Leerzeichen, würde Windows den Pfad sonst zerschneiden.
 
     `--background`: Beim Anmelden soll Dictum still im Infobereich starten, ohne dass sich
     das Fenster öffnet. Von Hand gestartet (Doppelklick) öffnet sich dagegen das Fenster."""
+    if launcher is None:  # als Programm (Dictum.exe) gibt es kein Startskript
+        return f'"{python_exe}" --background'
     return f'"{python_exe}" -X utf8 "{launcher}" --background'
 
 
 def background_python() -> Path:
-    """Der Python-Interpreter ohne Konsolenfenster (pythonw.exe), falls vorhanden."""
+    """Das Programm, das Dictum ohne Konsolenfenster startet: Dictum.exe, oder pythonw.exe beim Start aus
+    dem Quellcode."""
     python = Path(sys.executable)
+    if FROZEN:
+        return python
     pythonw = python.with_name("pythonw.exe")
     return pythonw if pythonw.exists() else python
 
 
+def launch_args() -> list[str]:
+    """Die Argumente, mit denen background_python() Dictum startet (ohne --background/--restart)."""
+    return [] if FROZEN else ["-X", "utf8", str(LAUNCHER)]
+
+
 def default_command() -> str:
-    return build_command(background_python(), LAUNCHER)
+    return build_command(background_python(), None if FROZEN else LAUNCHER)
 
 
 def current_value(key_path: str = RUN_KEY) -> str | None:

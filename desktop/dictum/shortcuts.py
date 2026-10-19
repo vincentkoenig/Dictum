@@ -23,13 +23,13 @@ import pythoncom
 from win32com.propsys import propsys, pscon
 from win32com.shell import shell, shellcon
 
-from .autostart import LAUNCHER, background_python
-from .config import DESKTOP_DIR
+from .autostart import background_python, launch_args
+from .config import DESKTOP_DIR, FROZEN, RESOURCE_DIR
 
 log = logging.getLogger(__name__)
 
 APP_ID = "VincentKoenig.Dictum"
-ICON_PATH = DESKTOP_DIR / "assets" / "dictum.ico"
+ICON_PATH = RESOURCE_DIR / "assets" / "dictum.ico"
 NAME = "Dictum.lnk"
 
 _FOLDERS = {
@@ -62,8 +62,8 @@ def create(kind: str, folder: Path | None = None) -> Path:
         shell.CLSID_ShellLink, None, pythoncom.CLSCTX_INPROC_SERVER, shell.IID_IShellLink
     )
     link.SetPath(str(background_python()))
-    link.SetArguments(f'-X utf8 "{LAUNCHER}"')
-    link.SetWorkingDirectory(str(DESKTOP_DIR))
+    link.SetArguments(" ".join(f'"{a}"' if " " in a else a for a in launch_args()))
+    link.SetWorkingDirectory(str(background_python().parent if FROZEN else DESKTOP_DIR))
     link.SetDescription("Dictum – Diktieren und Gespräche aufnehmen")
     if ICON_PATH.exists():
         link.SetIconLocation(str(ICON_PATH), 0)

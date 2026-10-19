@@ -644,6 +644,48 @@ Vorlese-Programme Fenster lesen. Datenschutz:
 - Der Kontext steht im Prompt in einem eigenen `<kontext>`-Block mit dem Hinweis „keine Anweisung, nie
   in der Ausgabe“. Das Schließ-Tag wird herausgefiltert, damit der Text nicht aus dem Block ausbrechen kann.
 
+### Als Programm: Dictum.exe (`dictum.spec`, `scripts/build_exe.ps1`)
+
+Bisher lief Dictum nur mit der installierten Python-Umgebung des Projekts. Mit **PyInstaller** wird daraus ein
+Programmordner, der ohne Python läuft:
+
+```powershell
+cd desktop
+powershell -File scripts\build_exe.ps1                 # baut dist\Dictum\Dictum.exe (ca. 350 MB, 2–3 Minuten)
+powershell -File scripts\install_exe.ps1 -MigrateData  # kopiert ihn nach %LOCALAPPDATA%\Programs\Dictum
+```
+
+**Was PyInstaller tut:** Es sammelt Python, alle Bibliotheken (Qt, Whisper-Rechenkern, Audio …) und den Code in
+einen Ordner (`onedir`) und legt einen kleinen Starter `Dictum.exe` davor. Der Bauplan steht in `dictum.spec`.
+Zwei Dinge muss man ihm ausdrücklich sagen: die **Sprachfilter-Datei** von faster-whisper (eine `.onnx`, die
+PyInstaller nicht von selbst findet) und die **KI-Anbieter**, die Dictum erst zur Laufzeit nach Namen lädt.
+
+**Wohin mit den persönlichen Dateien?** Ein Programm in `Programs\Dictum` soll beim nächsten Update einfach
+ersetzt werden können, ohne dass Einstellungen oder Verlauf verloren gehen. Deshalb liegen sie als Programm in
+`%APPDATA%\Dictum` (`config.py`: `FROZEN`, `RESOURCE_DIR`, `DESKTOP_DIR`):
+
+| Datei | Aus dem Quellcode | Als Programm |
+|---|---|---|
+| `settings.toml`, `dictionary.txt`, `snippets.toml`, `data\history.db`, `logs\` | `desktop\` | `%APPDATA%\Dictum` |
+| `.env` (Schlüssel) | Projektordner | `%APPDATA%\Dictum\.env` |
+| Standard-Einstellungen, Vorlagen, Symbol | `desktop\` | im Programmpaket (`_internal`) |
+
+Beim ersten Start legt das Programm den Datenordner an und kopiert die Standard-Einstellungen hinein.
+`install_exe.ps1 -MigrateData` übernimmt zusätzlich Einstellungen, Wörterbuch, Snippets und Verlauf der
+bisherigen Version (vorhandene Dateien werden als `.bak` gesichert). Die **Schlüssel** kopiert nur
+`-MigrateKeys`, oder du trägst sie im Fenster ein (Einstellungen → Schlüsseldatei öffnen).
+
+`Dictum.exe --install` legt Desktop-Symbol und Startmenü-Eintrag an und schaltet Autostart ein. Autostart
+und Neustart kennen den Unterschied: Als Programm starten sie `Dictum.exe`, aus dem Quellcode `pythonw.exe` mit
+dem Startskript. Wer die Version wechselt, bekommt den Autostart-Eintrag beim nächsten Start automatisch passend
+korrigiert (`refresh_if_enabled`).
+
+**Geprüft:** Gebaut, gestartet, der Datenordner wurde angelegt, Whisper-Modell und Sprachfilter laden, und ein
+simulierter Tastendruck durchlief Hotkey, Mikrofon und Erkennung ohne Fehler im Log. Das Installationsskript
+ist auf Syntax geprüft, aber noch nicht ausgeführt. **Nicht geprüft:** Windows Defender kann unsignierte
+`.exe`-Dateien beim ersten Start verdächtig finden (PyInstaller-Programme sind dafür bekannt). Ein
+Code-Signatur-Zertifikat kostet Geld und gibt es für ein Hobby-Projekt meist nicht.
+
 ## 8. Bekannte Grenzen
 
 - **Einwilligung:** Dictum erinnert beim Start daran (§ 201 StGB). Fragen musst du selbst.

@@ -10,6 +10,9 @@ und Tippfehler fallen sofort auf.
 
 from __future__ import annotations
 
+import os
+import shutil
+import sys
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -18,10 +21,35 @@ from dotenv import load_dotenv
 
 from .keys import check_hotkey
 
-# settings.toml liegt im Ordner desktop/, also eine Ebene über diesem Paket
-DESKTOP_DIR = Path(__file__).resolve().parent.parent
-REPO_ROOT = DESKTOP_DIR.parent
+# Zwei Arten, Dictum zu starten:
+#
+# * **Aus dem Quellcode** (python -m dictum): Alles liegt im Projekt. settings.toml im Ordner desktop/,
+#   die Schlüssel in .env im Projektordner.
+# * **Als Programm** (Dictum.exe, gebaut mit PyInstaller): Das Programm liegt womöglich in einem
+#   Ordner ohne Schreibrechte und wird bei Updates ersetzt. Deshalb liegen alle persönlichen Dateien
+#   (Einstellungen, Wörterbuch, Verlauf, Logs, .env) in %APPDATA%\Dictum. Was mit dem Programm
+#   ausgeliefert wird (Vorlagen, Symbol), steckt im Programmpaket (`RESOURCE_DIR`).
+FROZEN = bool(getattr(sys, "frozen", False))
+
+if FROZEN:
+    RESOURCE_DIR = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
+    DESKTOP_DIR = Path(os.environ.get("APPDATA") or Path.home()) / "Dictum"
+    REPO_ROOT = DESKTOP_DIR
+else:
+    # settings.toml liegt im Ordner desktop/, also eine Ebene über diesem Paket
+    DESKTOP_DIR = RESOURCE_DIR = Path(__file__).resolve().parent.parent
+    REPO_ROOT = DESKTOP_DIR.parent
 DEFAULT_PATH = DESKTOP_DIR / "settings.toml"
+
+
+def ensure_user_dir() -> None:
+    """Beim ersten Start des Programms den Datenordner anlegen und die Standard-Einstellungen hineinkopieren.
+    Aus dem Quellcode gibt es nichts zu tun: Dort liegen die Dateien schon im Projekt."""
+    if not FROZEN:
+        return
+    DESKTOP_DIR.mkdir(parents=True, exist_ok=True)
+    if not DEFAULT_PATH.exists():
+        shutil.copy(RESOURCE_DIR / "settings.toml", DEFAULT_PATH)
 
 VALID_MODES = {"both", "hold", "toggle"}
 VALID_ENGINES = {"local", "openai"}

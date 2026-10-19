@@ -6,7 +6,7 @@ import logging
 import sys
 
 from . import autostart
-from .config import load_env, load_settings
+from .config import ensure_user_dir, load_env, load_settings
 from .logsetup import setup_logging
 from .single_instance import SingleInstance
 
@@ -21,11 +21,23 @@ def main() -> None:
                         help="still im Infobereich starten, ohne das Fenster zu öffnen (Autostart)")
     parser.add_argument("--install-shortcuts", action="store_true",
                         help="Verknüpfungen auf dem Desktop und im Startmenü anlegen und beenden")
+    parser.add_argument("--install", action="store_true",
+                        help="Verknüpfungen anlegen und Autostart einschalten (für die installierte .exe)")
     parser.add_argument("--restart", action="store_true",
                         help="Neustart: wartet, bis die alte Instanz beendet ist")
     args = parser.parse_args()
 
+    ensure_user_dir()  # nur als Programm (.exe): Datenordner und Standard-Einstellungen anlegen
     setup_logging()
+
+    if args.install:
+        from . import shortcuts
+
+        for kind in ("desktop", "start_menu"):
+            print("angelegt:", shortcuts.create(kind))
+        autostart.enable()
+        print("Autostart eingeschaltet")
+        return
 
     if args.install_shortcuts:
         from . import shortcuts

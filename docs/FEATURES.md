@@ -18,7 +18,9 @@ der Anbieter (Stand Oktober 2026, siehe unten).
 | Stile pro App (formell/locker) und Kontext (Namen aus Fenster und Textfeld) | ✅ | Phase 8, Feldtext nur auf Wunsch |
 | Flüstermodus, Freihand (Antippen), Zeitlimit | ✅ | Phase 8, automatische Pegelanhebung |
 | Wörterbuch lernt aus deinen Korrekturen | ✅ | Phase 8, nur auf Wunsch (liest das Textfeld); Branchenlisten: ➖ |
-| Entwickler-Modus (CamelCase, Dateinamen), Privatmodus | 🔨 8 | |
+| Privatmodus (Verlauf aus, Audio wird nie gespeichert) | ✅ | Phase 8 |
+| Entwickler-Modus (CamelCase, Dateinamen) | 🔨 | später |
+| Eigenes Programm: Symbol, Startmenü, Autostart, **Dictum.exe** | ✅ | Phase 8 |
 | Verlauf und Statistik (Tempo, Serie, Top-Apps), Kosten pro Aufnahme | ✅ | Phase 8 |
 | Android: schwebende **Blase** in Textfeldern (Tipp- und Halte-Modus) | 🔨 11 | Bedienungshilfe-Dienst |
 | iPhone-Tastatur | ➖ | Handy ist Android |
@@ -69,7 +71,7 @@ der Anbieter (Stand Oktober 2026, siehe unten).
 | 0–5 | Grundgerüst, Diktat, KI-Text, Backend, Handy-App, Meetings am PC | ✅ |
 | 6 | Dauerbetrieb und Fenster am PC: Autostart, Einzelinstanz, Logdatei, Qt-Oberfläche, Verlauf, Einstellungen | ✅ (Installer zurückgestellt) |
 | 7 | Android-App mit Hintergrundaufnahme (Flutter-Hülle mit der Web-App darin) | 🔧 Prototyp gebaut, Test am Handy offen |
-| 8 | Wispr-Funktionen am PC | 🔨 |
+| 8 | Wispr-Funktionen am PC | ✅ (bis auf Entwickler-Modus) |
 | 9 | Aufnahmen auf Pocket/Plaud-Niveau | 🔨 |
 | 10 | Wissen und Automatisierung | 🔨 |
 | 11 | Android-Extras: Blase, Kachel, Widget, Telefonat-Modus | 🔨 |

@@ -22,7 +22,7 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
-from .config import DESKTOP_DIR
+from .config import DESKTOP_DIR, RESOURCE_DIR
 
 log = logging.getLogger(__name__)
 
@@ -33,7 +33,7 @@ SNIPPETS_PATH = DESKTOP_DIR / "snippets.toml"
 def ensure_user_files() -> None:
     """Legt dictionary.txt und snippets.toml aus den Vorlagen an, falls sie fehlen."""
     for target in (DICTIONARY_PATH, SNIPPETS_PATH):
-        example = target.with_name(target.stem + ".example" + target.suffix)
+        example = RESOURCE_DIR / (target.stem + ".example" + target.suffix)
         if not target.exists() and example.exists():
             shutil.copy(example, target)
             log.info("Angelegt: %s", target.name)

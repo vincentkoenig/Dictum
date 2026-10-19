@@ -10,6 +10,7 @@ desktop/dictionary.txt
 desktop/snippets.toml
 desktop/logs/
 desktop/data/
+desktop/build/
 
 # --- Python (Desktop-App) ---
 __pycache__/

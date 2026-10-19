@@ -54,3 +54,7 @@ def test_ausgeschaltet_bleibt_ausgeschaltet_beim_auffrischen():
     # Wer Autostart nicht will, bekommt ihn auch nicht heimlich eingeschaltet
     assert autostart.refresh_if_enabled(TEST_KEY, command="egal") is False
     assert autostart.is_enabled(TEST_KEY) is False
+
+
+def test_befehl_fuer_die_exe_hat_kein_startskript():
+    assert autostart.build_command(r"C:\Programme\Dictum\Dictum.exe", None) == r'"C:\Programme\Dictum\Dictum.exe" --background'
