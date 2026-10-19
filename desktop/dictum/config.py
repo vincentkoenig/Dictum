@@ -78,6 +78,25 @@ class HistorySettings:
 
 
 @dataclass
+class StylesSettings:
+    """Stil pro Kategorie (Auswahl siehe styles.py). `apps` ordnet einzelnen Programmen einen Stil zu."""
+
+    personal_chat: str = "casual"
+    work_chat: str = "neutral"
+    email: str = "formal"
+    other: str = "neutral"
+    apps: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass
+class ContextSettings:
+    """Was Dictum der KI zusätzlich über die Umgebung verrät (nur für die Bereinigung per Cloud-KI)."""
+
+    window_title: bool = True   # Fenstertitel, z. B. "Re: Angebot Müller GmbH"
+    field_text: bool = False    # Text im Eingabefeld rund um die Schreibstelle
+
+
+@dataclass
 class FeedbackSettings:
     sounds: bool = True
 
@@ -90,6 +109,8 @@ class Settings:
     cloud: CloudSettings = field(default_factory=CloudSettings)
     meeting: MeetingSettings = field(default_factory=MeetingSettings)
     history: HistorySettings = field(default_factory=HistorySettings)
+    styles: StylesSettings = field(default_factory=StylesSettings)
+    context: ContextSettings = field(default_factory=ContextSettings)
     feedback: FeedbackSettings = field(default_factory=FeedbackSettings)
 
 
@@ -107,6 +128,8 @@ def load_settings(path: Path = DEFAULT_PATH) -> Settings:
         cloud=CloudSettings(**data.get("cloud", {})),
         meeting=MeetingSettings(**data.get("meeting", {})),
         history=HistorySettings(**data.get("history", {})),
+        styles=StylesSettings(**data.get("styles", {})),
+        context=ContextSettings(**data.get("context", {})),
         feedback=FeedbackSettings(**data.get("feedback", {})),
     )
     _validate(settings)
@@ -127,6 +150,16 @@ def _validate(settings: Settings) -> None:
         raise ValueError("Jede Tastenkombination darf nur einmal vergeben werden.")
     if hk.mode not in VALID_MODES:
         raise ValueError(f"Ungültiger Modus '{hk.mode}'. Erlaubt: {VALID_MODES}")
+    from .styles import STYLES  # erst hier: styles.py importiert context.py (Windows-Bibliotheken)
+
+    st = settings.styles
+    for name in ("personal_chat", "work_chat", "email", "other"):
+        if getattr(st, name) not in STYLES:
+            raise ValueError(f"Ungültiger Stil '{getattr(st, name)}' bei styles.{name}. Erlaubt: {set(STYLES)}")
+    st.apps = {exe.lower(): style for exe, style in st.apps.items()}
+    for exe, style in st.apps.items():
+        if style not in STYLES:
+            raise ValueError(f"Ungültiger Stil '{style}' für {exe}. Erlaubt: {set(STYLES)}")
     if hk.hold_threshold <= 0:
         raise ValueError("hold_threshold muss größer als 0 sein.")
     if settings.transcription.engine not in VALID_ENGINES:

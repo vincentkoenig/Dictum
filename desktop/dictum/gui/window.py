@@ -47,6 +47,7 @@ from .dictionary_tab import DictionaryTab
 from .hotkey_field import HotkeyField
 from .icons import mic_icon
 from .stats_tab import StatsTab
+from .styles_tab import StylesTab
 from .labels import (
     ENGINE_LABELS,
     LANGUAGE_LABELS,
@@ -544,6 +545,7 @@ class MainWindow(QMainWindow):
         self.start_tab = StartTab(app)
         self.history_tab = HistoryTab(app)
         self.stats_tab = StatsTab(app)
+        self.styles_tab = StylesTab(app)
         self.dictionary_tab = DictionaryTab(app)
         self.settings_tab = SettingsTab(app)
         self.info_tab = InfoTab(app)
@@ -551,6 +553,7 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.start_tab, "Start")
         self.tabs.addTab(self.history_tab, "Verlauf")
         self.tabs.addTab(self.stats_tab, "Statistik")
+        self.tabs.addTab(self.styles_tab, "Stile")
         self.tabs.addTab(self.dictionary_tab, "Wörterbuch")
         self.tabs.addTab(self.settings_tab, "Einstellungen")
         self.tabs.addTab(self.info_tab, "Info")
@@ -580,6 +583,8 @@ class MainWindow(QMainWindow):
             self.settings_tab.load()  # frisch einlesen: im Tray kann sich etwas geändert haben
         elif widget is self.history_tab:
             self.history_tab.refresh(force=True)
+        elif widget is self.styles_tab:
+            self.styles_tab.load()
         elif widget is self.stats_tab:
             self.stats_tab.refresh()
         elif widget is self.dictionary_tab:

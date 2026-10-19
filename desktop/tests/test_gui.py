@@ -103,6 +103,7 @@ class FakeApp:
 
     def apply_settings(self, new):
         self.applied.append(new)
+        self.settings.styles, self.settings.context = new.styles, new.context
         return ["das lokale Modell"] if new.transcription.model != self.settings.transcription.model else []
 
     def set_hotkeys_enabled(self, enabled):
@@ -451,3 +452,36 @@ def test_statistik_ohne_verlauf(app, qapp):
 def test_statistik_leer(app, qapp):
     window = MainWindow(app)
     assert "Noch keine Diktate" in window.stats_tab.note.text()
+
+
+def test_stile_tab_speichert_kategorie_und_zuordnung(app, qapp, tmp_path):
+    from dictum.gui.styles_tab import StylesTab
+
+    path = tmp_path / "settings.toml"
+    shutil.copy(DEFAULT_PATH, path)
+    tab = StylesTab(app, path)
+    tab.categories["email"].setCurrentIndex(tab.categories["email"].findData("casual"))
+    assert load_settings(path).styles.email == "casual"
+
+    tab.app_name.setEditText("Chrome.exe")
+    tab.app_style.setCurrentIndex(tab.app_style.findData("very_casual"))
+    tab.add_override()
+    saved = load_settings(path)
+    assert saved.styles.apps == {"chrome": "very_casual"}
+    assert tab.overrides.count() == 1 and "chrome" in tab.overrides.item(0).text()
+
+    tab.overrides.setCurrentRow(0)
+    tab.remove_override()
+    assert load_settings(path).styles.apps == {}
+    assert load_settings(path).styles.email == "casual"       # Rest blieb erhalten
+
+
+def test_stile_tab_kontext_haken(app, qapp, tmp_path):
+    from dictum.gui.styles_tab import StylesTab
+
+    path = tmp_path / "settings.toml"
+    shutil.copy(DEFAULT_PATH, path)
+    tab = StylesTab(app, path)
+    assert tab.window_title.isChecked() and not tab.field_text.isChecked()
+    tab.field_text.setChecked(True)
+    assert load_settings(path).context.field_text is True

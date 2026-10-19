@@ -64,3 +64,47 @@ def active_window() -> ActiveWindow | None:
     except (psutil.Error, OSError):
         pass  # z. B. Zugriff verweigert bei Programmen mit Administratorrechten
     return ActiveWindow(exe=exe, title=title)
+
+
+FIELD_TEXT_TIMEOUT = 1.5  # Sekunden: Manche Programme beantworten UI-Automation sehr langsam
+
+
+def field_text(max_chars: int = 600) -> str:
+    """Text im Eingabefeld mit dem Fokus (die letzten `max_chars` Zeichen) – oder "".
+
+    Das nutzt "UI Automation", die Schnittstelle, über die auch Vorlese-Programme Fenster lesen.
+    Passwortfelder werden nie gelesen. Die Abfrage läuft in einem Hilfs-Thread mit Zeitlimit, damit ein
+    träges Programm das Diktat nicht aufhält.
+    """
+    import threading
+
+    result: list[str] = []
+
+    def read() -> None:
+        try:
+            import uiautomation as auto
+
+            with auto.UIAutomationInitializerInThread():
+                control = auto.GetFocusedControl()
+                if control is None or getattr(control, "IsPassword", False):
+                    return
+                text = ""
+                try:
+                    pattern = control.GetValuePattern()
+                    text = pattern.Value if pattern else ""
+                except Exception:
+                    pass
+                if not text:
+                    try:
+                        pattern = control.GetTextPattern()
+                        text = pattern.DocumentRange.GetText(max_chars * 4) if pattern else ""
+                    except Exception:
+                        pass
+                result.append((text or "")[-max_chars:])
+        except Exception:
+            log.debug("Feldtext nicht lesbar", exc_info=True)
+
+    worker = threading.Thread(target=read, daemon=True)
+    worker.start()
+    worker.join(FIELD_TEXT_TIMEOUT)
+    return result[0] if result else ""

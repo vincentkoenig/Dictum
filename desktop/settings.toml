@@ -91,6 +91,24 @@ enabled = true
 # Einträge, die älter sind, werden beim Start gelöscht (0 = nie löschen)
 keep_days = 90
 
+[styles]
+# Wie förmlich der Text aussieht, je nachdem, in welches Programm du diktierst. Ein Stil ändert nur
+# Groß-/Kleinschreibung und Satzzeichen, nie die Wörter.
+#   "neutral" = wie gesprochen · "formal" · "casual" (locker) · "very_casual" (klein, kaum Satzzeichen) · "excited"
+personal_chat = "casual"   # WhatsApp, Telegram, Discord …
+work_chat = "neutral"      # Teams, Slack …
+email = "formal"           # Outlook, Thunderbird, Gmail im Browser …
+other = "neutral"
+
+[styles.apps]
+# Eigene Zuordnung pro Programm (Dateiname ohne .exe), z. B.:  chrome = "casual"
+
+[context]
+# Was die KI-Bereinigung zusätzlich über deine Umgebung erfährt, damit Namen richtig geschrieben werden.
+# Beides geht nur an den KI-Anbieter, nur wenn die Bereinigung an ist, und wird nirgends gespeichert.
+window_title = true   # Titel des Fensters, z. B. "Re: Angebot Müller GmbH – Outlook"
+field_text = false    # Text im Eingabefeld rund um die Schreibstelle (Passwortfelder nie)
+
 [feedback]
 # Kurzer Piepton bei Start und Stopp der Aufnahme
 sounds = true

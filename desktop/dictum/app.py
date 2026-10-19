@@ -38,7 +38,7 @@ import pyperclip
 from PySide6.QtCore import QObject, QTimer, Signal
 from PySide6.QtWidgets import QApplication
 
-from . import autostart, context, costs, shortcuts
+from . import autostart, context, costs, shortcuts, styles
 from .audio import Recorder, duration_seconds
 from .cleanup import clean_text
 from .cloud_transcriber import OpenAITranscriber
@@ -238,7 +238,7 @@ class DictumApp:
         # … und das gemeinsame Einstellungs-Objekt aktualisieren, aus dem u. a. der
         # MeetingController bei jedem Meeting liest. Es ist dasselbe Objekt wie bisher,
         # deshalb sehen alle Beteiligten die neuen Werte sofort.
-        for section in ("hotkey", "transcription", "cleanup", "meeting", "history", "feedback"):
+        for section in ("hotkey", "transcription", "cleanup", "meeting", "history", "styles", "context", "feedback"):
             setattr(old, section, getattr(new, section))
         log.info("Einstellungen übernommen (Neustart nötig für: %s)", ", ".join(needs_restart) or "nichts")
         return needs_restart
@@ -378,7 +378,8 @@ class DictumApp:
             text = snippet
         elif self.cleanup_enabled:
             self.overlay.show("polishing")
-            text = clean_text(raw, self.provider, dictionary)
+            style = styles.style_for(target, self.settings.styles)
+            text = clean_text(raw, self.provider, dictionary, style, self._context_for(target))
             cleaned = True
         else:
             text = raw
@@ -389,6 +390,17 @@ class DictumApp:
         self._last_text = text
         insert_text(text)
         self._remember(raw, text, audio, cleaned, snippet is not None, target)
+
+    def _context_for(self, target: context.ActiveWindow | None) -> str:
+        """Was die KI über die Umgebung erfahren darf (siehe [context] in settings.toml)."""
+        parts = []
+        if self.settings.context.window_title and target and target.title:
+            parts.append(f"Fenstertitel: {target.title}")
+        if self.settings.context.field_text:
+            text = context.field_text()
+            if text.strip():
+                parts.append(f"Text im Eingabefeld (Ausschnitt):\n{text}")
+        return "\n".join(parts)
 
     def _remember(self, raw: str, text: str, audio: np.ndarray, cleaned: bool, snippet: bool,
                   target: context.ActiveWindow | None = None) -> None:
