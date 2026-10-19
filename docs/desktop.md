@@ -56,6 +56,7 @@ egal ob Word, Browser, Outlook oder Slack. Dieses Dokument erklärt, wie das fun
 | `gui/overlay.py` | Statusanzeige | Fenster, das nie den Fokus nimmt |
 | `gui/tray.py` | Symbol im Infobereich | Menü wird vor dem Aufklappen synchronisiert |
 | `gui/window.py` | Dictum-Fenster | Reiter Start, Verlauf, Einstellungen, Info |
+| `shortcuts.py` | Desktop-Symbol, Startmenü | `.lnk` mit Symbol und AppUserModelID |
 | `history.py` | Lokaler Verlauf | SQLite-Datei, nur auf diesem PC |
 | `settings_io.py` | Einstellungen speichern | tomlkit erhält die Kommentare |
 | `app.py` | Verbindet alles | Threads, Signale, Warteschlange |
@@ -481,6 +482,19 @@ man nach „50%“, würde sonst alles gefunden. `history.py` entwertet diese Ze
 
 Nicht geprüft habe ich das Klicken im Tray-Menü und den Neustart-Knopf an der echten Oberfläche.
 Dafür gibt es Tests der Menü-Logik und von `apply_settings`, aber keinen Klick auf dem Bildschirm.
+
+### Ein „richtiges“ Programm: Symbol und Verknüpfungen (`shortcuts.py`)
+
+- **Symbol:** `scripts/make_app_icon.py` malt das Mikrofon aus `gui/icons.py` in sieben Größen
+  (16–256 px) in `desktop/assets/dictum.ico`. Windows nimmt je nach Ort die schärfste passende.
+- **Verknüpfungen:** Im Reiter *Einstellungen* (Haken *Symbol auf dem Desktop*, *Eintrag im Startmenü*)
+  oder per `python -m dictum --install-shortcuts`. Ziel ist `pythonw.exe` mit `dictum_tray.pyw`, also ohne
+  Konsolenfenster. Doppelklick öffnet das Fenster; der Autostart startet dagegen still mit `--background`.
+- **Taskleiste:** Ohne weiteres Zutun zeigt Windows das Python-Symbol. `set_app_id()` gibt dem Prozess die
+  AppUserModelID `VincentKoenig.Dictum`, dieselbe steckt in den Verknüpfungen. So erscheint das Dictum-Symbol,
+  und ein Anheften bleibt zugeordnet.
+- **Ordner:** Der Desktop liegt oft in OneDrive. Deshalb fragt Dictum Windows (`SHGetFolderPath`), statt
+  `~/Desktop` zu raten. Die Tests legen Verknüpfungen nur in Wegwerf-Ordnern an.
 
 ## 8. Bekannte Grenzen
 

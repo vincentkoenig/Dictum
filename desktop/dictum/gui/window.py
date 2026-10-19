@@ -334,6 +334,8 @@ class SettingsTab(QWidget):
         self.keep_days.setSuffix(" Tage")
         self.keep_days.setSpecialValueText("nie löschen")
         self.autostart = QCheckBox("Mit Windows starten")
+        self.desktop_shortcut = QCheckBox("Symbol auf dem Desktop")
+        self.start_menu_shortcut = QCheckBox("Eintrag im Startmenü")
 
         diktat = QGroupBox("Diktieren")
         form = QFormLayout(diktat)
@@ -369,6 +371,8 @@ class SettingsTab(QWidget):
         pform.addRow(self.history_on)
         pform.addRow("Aufbewahren:", self.keep_days)
         pform.addRow(self.autostart)
+        pform.addRow(self.desktop_shortcut)
+        pform.addRow(self.start_menu_shortcut)
 
         self.save_btn = QPushButton("Speichern")
         self.save_btn.clicked.connect(lambda: self.save(restart=False))
@@ -415,6 +419,8 @@ class SettingsTab(QWidget):
         self.history_on.setChecked(s.history.enabled)
         self.keep_days.setValue(int(s.history.keep_days))
         self.autostart.setChecked(bool(app.get("autostart")))
+        self.desktop_shortcut.setChecked(bool(app.get("desktop_shortcut")))
+        self.start_menu_shortcut.setChecked(bool(app.get("start_menu_shortcut")))
 
     def _show_key_status(self, status: dict[str, bool] | None = None) -> None:
         status = status or self.app.key_status()
@@ -461,6 +467,8 @@ class SettingsTab(QWidget):
             return False
         needs_restart = self.app.apply_settings(new_settings)
         self.app.set("autostart", self.autostart.isChecked())
+        self.app.set("desktop_shortcut", self.desktop_shortcut.isChecked())
+        self.app.set("start_menu_shortcut", self.start_menu_shortcut.isChecked())
         if restart:
             self.app.restart()
             return True

@@ -87,7 +87,8 @@ class FakeApp:
         self.hotkey_text = "Strg rechts"
         self.tray = FakeTray()
         self.values = {"mode": "both", "language": "de", "engine": "local", "cleanup": True,
-                       "provider": "anthropic", "autostart": False}
+                       "provider": "anthropic", "autostart": False,
+                       "desktop_shortcut": False, "start_menu_shortcut": False}
         self.set_calls = []
         self.applied = []
         self.restarted = False
@@ -269,6 +270,7 @@ def test_einstellungen_laden_und_speichern(app, qapp, tmp_path):
     assert saved.hotkey.copy_last == [] and saved.hotkey.paste_last == ["shift", "alt", "z"]
     assert app.applied and "Neustart" in tab.message.text() and "das lokale Modell" in tab.message.text()
     assert ("autostart", False) in app.set_calls
+    assert ("desktop_shortcut", False) in app.set_calls
     assert app.restarted is False
 
 

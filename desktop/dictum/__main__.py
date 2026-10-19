@@ -19,11 +19,25 @@ def main() -> None:
                         help="bei einem zweiten Start keine Meldung anzeigen (für Tests/Skripte)")
     parser.add_argument("--background", action="store_true",
                         help="still im Infobereich starten, ohne das Fenster zu öffnen (Autostart)")
+    parser.add_argument("--install-shortcuts", action="store_true",
+                        help="Verknüpfungen auf dem Desktop und im Startmenü anlegen und beenden")
     parser.add_argument("--restart", action="store_true",
                         help="Neustart: wartet, bis die alte Instanz beendet ist")
     args = parser.parse_args()
 
     setup_logging()
+
+    if args.install_shortcuts:
+        from . import shortcuts
+
+        for kind in ("desktop", "start_menu"):
+            print("angelegt:", shortcuts.create(kind))
+        return
+
+    # Vor dem ersten Fenster: Die Taskleiste zeigt dann das Dictum-Symbol statt "Python"
+    from . import shortcuts
+
+    shortcuts.set_app_id()
 
     # Nach einem Neustart läuft die alte Instanz noch kurz: bis zu 20 s auf sie warten
     instance = SingleInstance(wait_seconds=20 if args.restart else 0)

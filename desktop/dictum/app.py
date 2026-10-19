@@ -38,7 +38,7 @@ import pyperclip
 from PySide6.QtCore import QObject, QTimer, Signal
 from PySide6.QtWidgets import QApplication
 
-from . import autostart
+from . import autostart, shortcuts
 from .audio import Recorder, duration_seconds
 from .cleanup import clean_text
 from .cloud_transcriber import OpenAITranscriber
@@ -188,6 +188,8 @@ class DictumApp:
             "cleanup": lambda: self.cleanup_enabled,
             "provider": lambda: self.provider.name,
             "autostart": autostart.is_enabled,
+            "desktop_shortcut": lambda: shortcuts.is_present("desktop"),
+            "start_menu_shortcut": lambda: shortcuts.is_present("start_menu"),
         }[setting]()
 
     def set(self, setting: str, value) -> None:
@@ -204,6 +206,10 @@ class DictumApp:
         elif setting == "autostart":
             if bool(value) != autostart.is_enabled():
                 autostart.set_enabled(bool(value))
+        elif setting in ("desktop_shortcut", "start_menu_shortcut"):
+            kind = "desktop" if setting == "desktop_shortcut" else "start_menu"
+            if bool(value) != shortcuts.is_present(kind):
+                (shortcuts.create if value else shortcuts.remove)(kind)
         log.info("Einstellung geändert: %s = %s", setting, value)
 
     def apply_settings(self, new: Settings) -> list[str]:
