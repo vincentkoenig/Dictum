@@ -11,7 +11,7 @@ der Anbieter (Stand Oktober 2026, siehe unten).
 | Funktion | Stand | Anmerkung |
 |---|---|---|
 | Diktat in jede App, Satzzeichen, Füllwörter, Selbstkorrektur, Listen | ✅ | Phase 1–2 |
-| Hotkey halten oder antippen | ✅ | Doppeltipp als Freihand-Modus: 🔨 8 |
+| Hotkey halten oder antippen, **jede Taste frei wählbar** (auch Kombinationen, Maustasten), Esc bricht ab, letztes Diktat erneut einfügen/kopieren | ✅ | Phase 8; Doppeltipp als Freihand-Modus: 🔨 8 |
 | Eigenes Wörterbuch, Snippets, Abgleich mit dem Handy | ✅ | Phase 2, 5 |
 | Fenster, Verlauf mit Suche, Tagesstatistik | ✅ | Phase 6 |
 | **Command Mode**: Text markieren, Befehl sprechen („kürzer“); ohne Markierung Text erzeugen; Esc bricht ab, Strg+Z macht rückgängig | 🔨 8 | eigener Hotkey |

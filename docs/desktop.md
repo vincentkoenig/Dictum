@@ -49,7 +49,9 @@ egal ob Word, Browser, Outlook oder Slack. Dieses Dokument erklärt, wie das fun
 | `llm/` | KI-Anbieter | Eine Schnittstelle, zwei Umsetzungen (Claude, OpenAI) |
 | `cleanup.py` | Text bereinigen | Prompt „Werkzeug, kein Assistent“ + Plausibilitätsprüfung |
 | `vocabulary.py` | Wörterbuch & Snippets | Persönliche Dateien, Vorlagen im Repo |
+| `keys.py` | Tastennamen | echte Taste → Name und zurück, Prüfung, Tasten-Aufnahme |
 | `hotkey.py` | Halten/Antippen erkennen | Zustandsmaschine, getrennt von der Tastatur |
+| `gui/hotkey_field.py` | „Taste wählen“ | Dialog: Taste drücken statt aus einer Liste wählen |
 | `inserter.py` | Text einfügen | Zwischenablage + simuliertes Strg+V |
 | `gui/overlay.py` | Statusanzeige | Fenster, das nie den Fokus nimmt |
 | `gui/tray.py` | Symbol im Infobereich | Menü wird vor dem Aufklappen synchronisiert |
@@ -75,6 +77,36 @@ Zustand sie gerade ist:
 
 Wird während `PRESSED` eine **andere** Taste gedrückt (z. B. C, weil man mit der rechten
 Strg-Taste eigentlich Strg+C drücken wollte), war das kein Diktat – die Aufnahme wird verworfen.
+**Esc** verwirft jede laufende Aufnahme, auch eine angetippte (`escape()`); ohne Aufnahme bleibt
+Esc eine ganz normale Taste.
+
+### Freie Tastenwahl (`keys.py`, `gui/hotkey_field.py`)
+
+Im Reiter *Einstellungen* steht keine Liste mehr, sondern **„Ändern …“**: Ein Dialog sagt „Drücke jetzt
+die Taste“, man drückt sie (oder eine Kombination, oder eine Maustaste) und lässt los. Fertig ist die
+Eingabe, sobald **alles losgelassen** ist, damit „Strg + R“ auch klappt, wenn die Finger nacheinander
+abheben (`CaptureState`).
+
+Damit das sauber bleibt, hat jede Taste einen **konkreten Namen** (`ctrl_r`, `f8`, `z`, `vk_173`,
+`mouse_x1`). Der Hörer wandelt jedes Ereignis von pynput mit `canonical()` in so einen Namen um.
+Gruppen wie `"ctrl"` werden mit `expand()` zu `{ctrl_l, ctrl_r}`. Verglichen wird dann nur noch Text.
+Buchstaben werden über den Tastencode (`vk`) benannt, weil pynput unter gedrückter Strg-Taste sonst
+Steuerzeichen statt „a“ meldet.
+
+**Was als Taste taugt** (`check_hotkey`): Sondertasten wie Strg rechts, F1–F24, Feststelltaste, Pause,
+Medientasten und Maustasten (Mausrad-Klick, Seitentasten) gehen allein. Buchstaben, Ziffern, Leertaste
+und Co. brauchen eine Strg-, Alt-, Umschalt- oder Win-Taste dazu, sonst würde jedes Tippen ein Diktat
+auslösen. Esc ist zum Abbrechen reserviert. Linke und rechte Maustaste fehlen mit Absicht.
+
+**Sofort wirksam:** `HotkeyListener.set_keys()` tauscht die Taste im laufenden Betrieb, ein Neustart ist
+nicht nötig. Während der Dialog offen ist, sind die Hotkeys pausiert (`set_enabled(False)`), sonst würde
+das Drücken der alten Taste gleich ein Diktat starten. Der Maus-Hook läuft nur, solange eine Maustaste
+belegt ist.
+
+**Zusatz-Tasten wie bei Wispr Flow:** *Letztes Diktat einfügen* (Standard Umschalt+Alt+Z) und
+*Letztes Diktat kopieren* (Umschalt+Alt+X). Praktisch, wenn ein Feld das Einfügen verschluckt hat. Sie
+laufen als einfache Auslöser neben dem Diktat-Hotkey (`set_trigger`). Das Diktat selbst bleibt im
+Speicher, nach einem Neustart kommt es aus dem Verlauf.
 
 ### Welche Taste? (Gruppen vs. Einzeltasten)
 
@@ -394,7 +426,7 @@ Danach übernimmt `DictumApp.apply_settings()` die neuen Werte:
 
 | Wirkt sofort | Braucht einen Neustart |
 |---|---|
-| Bedienung, Sprache, Spracherkennung, KI an/aus, KI-Anbieter, Töne, Meeting-Optionen, Verlauf, Autostart | die **Taste** (der Tastatur-Hörer wurde mit ihr gestartet) und das **lokale Modell** (es ist geladen) |
+| **Tasten**, Bedienung, Sprache, Spracherkennung, KI an/aus, KI-Anbieter, Töne, Meeting-Optionen, Verlauf, Autostart | das **lokale Modell** (es ist geladen) |
 
 Für den Neustart gibt es „Speichern und neu starten“. Die neue Instanz startet mit `--restart`
 und **wartet bis zu 20 Sekunden**, bis die alte beendet ist und den Mutex freigibt. Ohne das Warten
