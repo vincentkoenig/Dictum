@@ -225,3 +225,29 @@ def test_command_mode_ausschalten():
     listener.add_machine("command", [], cmd)
     listener._on_press(Key.f9)
     assert cev == []
+
+
+def test_finish_beendet_gehaltene_aufnahme_und_naechster_druck_startet_neu():
+    sm, ev = make()
+    sm.combo_down(0.0)
+    sm.finish()                       # Zeitlimit, Taste noch unten
+    assert ev == ["start", "stop"] and sm.state == State.WAIT_RELEASE
+    sm.combo_up(5.0)
+    sm.combo_down(6.0)
+    assert ev == ["start", "stop", "start"]
+
+
+def test_finish_beendet_angetippte_aufnahme():
+    sm, ev = make()
+    sm.combo_down(0.0)
+    sm.combo_up(0.1)                  # angetippt, Aufnahme läuft
+    sm.finish()
+    assert ev == ["start", "stop"] and sm.state == State.IDLE
+    sm.combo_down(9.0)                # neuer Start, nicht "Stopp"
+    assert ev[-1] == "start"
+
+
+def test_finish_ohne_aufnahme_tut_nichts():
+    sm, ev = make()
+    sm.finish()
+    assert ev == []

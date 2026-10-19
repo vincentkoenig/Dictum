@@ -33,6 +33,7 @@ class HotkeySettings:
     keys: list[str] = field(default_factory=lambda: ["ctrl_r"])
     mode: str = "both"
     hold_threshold: float = 0.4
+    max_minutes: float = 20   # Aufnahmen enden nach so vielen Minuten von selbst (0 = unbegrenzt)
     # Zusatz-Tasten wie bei Wispr Flow (leere Liste = aus): letztes Diktat erneut einfügen / kopieren
     command: list[str] = field(default_factory=lambda: ["f9"])   # Command Mode, [] = aus
     paste_last: list[str] = field(default_factory=lambda: ["shift", "alt", "z"])
@@ -46,6 +47,7 @@ class TranscriptionSettings:
     model: str = "small"
     language: str = "de"
     fallback_language: str = "de"
+    whisper_mode: bool = True   # leise Sprache verstärken, Sprachfilter empfindlicher (siehe levels.py)
 
 
 @dataclass
@@ -165,6 +167,8 @@ def _validate(settings: Settings) -> None:
     for exe, style in st.apps.items():
         if style not in STYLES:
             raise ValueError(f"Ungültiger Stil '{style}' für {exe}. Erlaubt: {set(STYLES)}")
+    if hk.max_minutes < 0:
+        raise ValueError("hotkey.max_minutes darf nicht negativ sein (0 = unbegrenzt).")
     if hk.hold_threshold <= 0:
         raise ValueError("hold_threshold muss größer als 0 sein.")
     if settings.transcription.engine not in VALID_ENGINES:

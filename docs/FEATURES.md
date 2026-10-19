@@ -16,7 +16,7 @@ der Anbieter (Stand Oktober 2026, siehe unten).
 | Fenster, Verlauf mit Suche, Tagesstatistik | ✅ | Phase 6 |
 | **Command Mode**: Text markieren, Befehl sprechen („kürzer“); ohne Markierung Text erzeugen; Esc bricht ab, Strg+Z macht rückgängig | ✅ | Phase 8, Standard-Taste F9 |
 | Stile pro App (formell/locker) und Kontext (Namen aus Fenster und Textfeld) | ✅ | Phase 8, Feldtext nur auf Wunsch |
-| Flüstermodus | 🔨 8 | automatische Pegelanhebung |
+| Flüstermodus, Freihand (Antippen), Zeitlimit | ✅ | Phase 8, automatische Pegelanhebung |
 | Wörterbuch lernt aus deinen Korrekturen, Branchenlisten | 🔨 8 | ein gemeinsames Wörterbuch |
 | Entwickler-Modus (CamelCase, Dateinamen), Privatmodus | 🔨 8 | |
 | Verlauf und Statistik (Tempo, Serie, Top-Apps), Kosten pro Aufnahme | ✅ | Phase 8 |

@@ -38,7 +38,7 @@ import pyperclip
 from PySide6.QtCore import QObject, QTimer, Signal
 from PySide6.QtWidgets import QApplication
 
-from . import autostart, commands, context, costs, shortcuts, styles
+from . import autostart, commands, context, costs, levels, shortcuts, styles
 from .audio import Recorder, duration_seconds
 from .cleanup import clean_text
 from .cloud_transcriber import OpenAITranscriber
@@ -94,6 +94,9 @@ class DictumApp:
         self.local = LocalTranscriber(tr.model, tr.language, tr.fallback_language)
         self.cloud = OpenAITranscriber(tr.openai_model, tr.language)
         self.engine = tr.engine
+        self.whisper_mode = tr.whisper_mode
+        self.local.sensitive = tr.whisper_mode
+        self._limit_timer: threading.Timer | None = None  # beendet vergessene Aufnahmen
 
         self.cleanup_enabled = settings.cleanup.enabled
         self.provider = create_provider(settings.cleanup.provider, settings.cleanup)
@@ -243,6 +246,7 @@ class DictumApp:
         self.local.language = self.cloud.language = new.transcription.language
         self.local.fallback_language = new.transcription.fallback_language
         self.engine = new.transcription.engine
+        self.whisper_mode = self.local.sensitive = new.transcription.whisper_mode
         self.cloud.model = new.transcription.openai_model
         self.cleanup_enabled = new.cleanup.enabled
         self.provider = create_provider(new.cleanup.provider, new.cleanup)
@@ -336,8 +340,30 @@ class DictumApp:
             return
         self._beep(880)
         self.overlay.show("listening")
+        self._arm_limit()
+
+    def _arm_limit(self) -> None:
+        """Eine vergessene Aufnahme (z. B. angetippt und dann weggegangen) soll nicht ewig laufen."""
+        self._disarm_limit()
+        minutes = self.settings.hotkey.max_minutes
+        if minutes > 0:
+            self._limit_timer = threading.Timer(minutes * 60, self._limit_reached)
+            self._limit_timer.daemon = True
+            self._limit_timer.start()
+
+    def _disarm_limit(self) -> None:
+        if self._limit_timer is not None:
+            self._limit_timer.cancel()
+            self._limit_timer = None
+
+    def _limit_reached(self) -> None:
+        log.info("Zeitlimit der Aufnahme erreicht – beende sie")
+        self.overlay.flash("Zeitlimit erreicht – Aufnahme beendet", seconds=3)
+        self.machine.finish()
+        self.command_machine.finish()
 
     def _stop(self) -> None:
+        self._disarm_limit()
         audio = self.recorder.stop()
         self._beep(660)
         ready = self.engine == "openai" or self.local.is_ready
@@ -358,6 +384,7 @@ class DictumApp:
         self._stop()
 
     def _cancel(self) -> None:
+        self._disarm_limit()
         self._command_mode = False
         self.recorder.stop()
         self.overlay.hide()
@@ -470,6 +497,9 @@ class DictumApp:
 
     def _transcribe(self, audio: np.ndarray, dictionary: list[str]) -> str:
         self.local.vocabulary = self.cloud.vocabulary = dictionary
+        audio, gain = levels.boost_quiet(audio, self.whisper_mode)
+        if gain > 1.5:
+            log.info("Leise Sprache um den Faktor %.1f verstärkt (Flüstermodus)", gain)
         self._stt_model = None
         if self.engine == "openai":
             try:

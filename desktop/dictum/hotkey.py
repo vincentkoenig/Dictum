@@ -89,6 +89,16 @@ class HotkeyStateMachine:
             self.state = State.WAIT_RELEASE
             self.on_cancel()
 
+    def finish(self) -> None:
+        """Aufnahme von außen beenden (z. B. Zeitlimit), als hätte man die Taste losgelassen/angetippt.
+        Der Zustand wird mitgeführt, damit der nächste Tastendruck wieder eine neue Aufnahme startet."""
+        if self.state == State.PRESSED:
+            self.state = State.WAIT_RELEASE
+            self.on_stop()
+        elif self.state == State.TOGGLED:
+            self.state = State.IDLE
+            self.on_stop()
+
     def escape(self) -> None:
         """Esc: laufende Aufnahme verwerfen. Ohne Aufnahme tut es nichts (Esc bleibt normal)."""
         if self.state == State.PRESSED:

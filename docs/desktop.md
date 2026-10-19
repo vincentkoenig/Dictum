@@ -64,6 +64,7 @@ egal ob Word, Browser, Outlook oder Slack. Dieses Dokument erklärt, wie das fun
 | `styles.py` | Stile pro Programm | Programm → Kategorie → Stil, Anweisung an die KI |
 | `gui/styles_tab.py` | Reiter Stile | Stil je Kategorie, eigene Zuordnung, Kontext-Haken |
 | `commands.py` | Command Mode | Anweisung + markierter Text → KI → Ergebnis |
+| `levels.py` | Flüstermodus | leise Aufnahmen auf Sprechpegel anheben |
 | `history.py` | Lokaler Verlauf | SQLite-Datei, nur auf diesem PC |
 | `settings_io.py` | Einstellungen speichern | tomlkit erhält die Kommentare |
 | `app.py` | Verbindet alles | Threads, Signale, Warteschlange |
@@ -527,6 +528,27 @@ Das **Programm** merkt sich `context.active_window()` beim Start der Aufnahme: V
 Prozess → Name. Programme mit Administratorrechten verweigern den Namen, dann bleibt er leer. Der Name
 steht nur im lokalen Verlauf. Ältere Datenbanken bekommen die neuen Spalten `app` und `cost` beim Öffnen
 nachgerüstet (`MIGRATIONS`), alte Einträge haben dann kein Programm.
+
+### Flüstermodus und Freihand (`levels.py`)
+
+**Freihand** (Hände frei, Aufnahme läuft von allein weiter) gibt es von Anfang an: Die Taste **kurz antippen**
+startet die Aufnahme, ein zweites Antippen beendet sie (siehe Zustandsmaschine, `TOGGLED`). Wispr Flow macht
+dafür einen Doppeltipp, weil dort Halten und Antippen sonst kollidieren; bei Dictum entscheidet die Haltedauer
+(unter 0,4 s = Antippen), das ist eine Bewegung weniger. Neu ist ein **Zeitlimit** (Standard 20 Minuten, wie bei
+Wispr): Eine vergessene Aufnahme endet von selbst und wird verarbeitet (`HotkeyStateMachine.finish`, damit der
+nächste Tastendruck wieder sauber eine neue Aufnahme startet). Einstellbar, 0 = unbegrenzt.
+
+**Flüstermodus:** Wer leise spricht, wird von Whisper oft nicht verstanden, weil der eingebaute Sprachfilter
+(VAD) leise Sprache für Stille hält. Zwei Mittel, beide automatisch:
+
+1. `levels.boost_quiet`: Misst den Pegel der Sprache (90. Perzentil der 20-ms-Blöcke, damit Pausen den Wert
+   nicht drücken) und hebt die Aufnahme auf einen normalen Pegel an, höchstens um das 30-Fache (sonst würde
+   nur Rauschen laut). Normal laute Aufnahmen und Stille bleiben unverändert.
+2. Der Sprachfilter des lokalen Whisper wird empfindlicher gestellt (Schwelle 0,3 statt 0,5).
+
+Das gilt für lokale und OpenAI-Erkennung und lässt sich im Reiter *Einstellungen* ausschalten. Getestet ist die
+Verstärkung mit künstlichen Tönen (Pegel, Grenzen, Stille); mit echtem Flüstern solltest du es selbst
+ausprobieren und mir sagen, ob die Schwellen passen.
 
 ### Command Mode: Text per Sprache umschreiben (`commands.py`)
 

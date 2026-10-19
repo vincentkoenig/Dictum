@@ -29,6 +29,9 @@ hold_threshold = 0.4
 # (Claude oder OpenAI) mit gültigem Key. Keine Kombination darf in einer anderen enthalten sein.
 command = ["f9"]
 
+# Nach so vielen Minuten endet eine Aufnahme von selbst (Schutz vor vergessenen Aufnahmen). 0 = unbegrenzt.
+max_minutes = 20
+
 # Zusatz-Tasten wie bei Wispr Flow ([] = aus):
 # Das letzte Diktat noch einmal einfügen bzw. nur in die Zwischenablage kopieren.
 # Esc bricht eine laufende Aufnahme jederzeit ab (fest eingebaut).
@@ -53,6 +56,10 @@ model = "small"
 # 30-s-Fenster). Englische Begriffe in deutschen Sätzen klappen auch mit "de".
 # Im Tray-Menü jederzeit umschaltbar.
 language = "de"
+
+# Flüstermodus: Ist die Sprache zu leise, wird sie automatisch verstärkt und der Sprachfilter
+# empfindlicher gestellt. Normal laute Aufnahmen bleiben unverändert.
+whisper_mode = true
 
 # Fällt die automatische Erkennung unsicher aus, wird diese Sprache genommen
 fallback_language = "de"

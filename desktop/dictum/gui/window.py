@@ -316,6 +316,11 @@ class SettingsTab(QWidget):
             self.model.addItem(name, name)
         self.openai_stt = QComboBox()
         _fill(self.openai_stt, OPENAI_STT_MODELS)
+        self.whisper = QCheckBox("Flüstermodus: leise Sprache automatisch verstärken")
+        self.max_minutes = QSpinBox()
+        self.max_minutes.setRange(0, 120)
+        self.max_minutes.setSuffix(" min")
+        self.max_minutes.setSpecialValueText("unbegrenzt")
         self.cleanup = QCheckBox("KI-Bereinigung (Füllwörter, Satzzeichen, Listen)")
         self.provider = QComboBox()
         _fill(self.provider, PROVIDER_LABELS)
@@ -348,6 +353,8 @@ class SettingsTab(QWidget):
         form.addRow("Sprache:", self.language)
         form.addRow("Spracherkennung:", self.engine)
         form.addRow("Lokales Modell:", self.model)
+        form.addRow(self.whisper)
+        form.addRow("Aufnahme endet nach:", self.max_minutes)
         form.addRow("OpenAI-Modell (Erkennung):", self.openai_stt)
         form.addRow(self.cleanup)
         form.addRow("KI-Anbieter:", self.provider)
@@ -415,6 +422,8 @@ class SettingsTab(QWidget):
         _select(self.engine, app.get("engine"))
         _select(self.model, s.transcription.model)
         _select(self.openai_stt, s.transcription.openai_model)
+        self.whisper.setChecked(s.transcription.whisper_mode)
+        self.max_minutes.setValue(int(s.hotkey.max_minutes))
         _select(self.openai_cleanup, s.cleanup.openai_model)
         self._show_key_status()
         self.cleanup.setChecked(bool(app.get("cleanup")))
@@ -449,13 +458,14 @@ class SettingsTab(QWidget):
             "hotkey": {
                 "keys": self.hotkey.keys, "mode": self.mode.currentData(),
                 "command": self.command.keys, "paste_last": self.paste_last.keys,
-                "copy_last": self.copy_last.keys,
+                "copy_last": self.copy_last.keys, "max_minutes": self.max_minutes.value(),
             },
             "transcription": {
                 "language": self.language.currentData(),
                 "engine": self.engine.currentData(),
                 "model": self.model.currentData(),
                 "openai_model": self.openai_stt.currentData(),
+                "whisper_mode": self.whisper.isChecked(),
             },
             "cleanup": {
                 "enabled": self.cleanup.isChecked(), "provider": self.provider.currentData(),

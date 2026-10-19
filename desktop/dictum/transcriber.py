@@ -41,6 +41,8 @@ class LocalTranscriber:
         self.fallback_language = fallback_language
         # Begriffe aus dem persönlichen Wörterbuch (siehe vocabulary.py)
         self.vocabulary: list[str] = []
+        # Flüstermodus: Sprachfilter empfindlicher, damit leise Sprache nicht als Stille gilt
+        self.sensitive = False
         self._model: WhisperModel | None = None
         self._ready = threading.Event()
 
@@ -67,6 +69,7 @@ class LocalTranscriber:
             language=language,
             beam_size=5,
             vad_filter=True,
+            vad_parameters={"threshold": 0.3 if self.sensitive else 0.5},  # 0.5 = Standard
             # Kurze Diktate sind eigenständig – Vorgängertext würde nur Fehler mitschleppen
             condition_on_previous_text=False,
             # Der "initial_prompt" ist Text, den Whisper so behandelt, als wäre er kurz

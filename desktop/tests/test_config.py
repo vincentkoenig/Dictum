@@ -47,3 +47,16 @@ def test_unbekannter_ki_anbieter_wird_abgelehnt(tmp_path):
     f.write_text('[cleanup]\nprovider = "gemini"\n', encoding="utf-8")
     with pytest.raises(ValueError, match="provider"):
         load_settings(f)
+
+
+def test_zeitlimit_und_fluestermodus(tmp_path):
+    import pytest
+
+    f = tmp_path / "s.toml"
+    assert load_settings(f).hotkey.max_minutes == 20 and load_settings(f).transcription.whisper_mode is True
+    f.write_text("[hotkey]\nmax_minutes = -1\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="max_minutes"):
+        load_settings(f)
+    f.write_text("[hotkey]\nmax_minutes = 0\n[transcription]\nwhisper_mode = false\n", encoding="utf-8")
+    s = load_settings(f)
+    assert s.hotkey.max_minutes == 0 and s.transcription.whisper_mode is False
