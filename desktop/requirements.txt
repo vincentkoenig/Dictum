@@ -13,6 +13,9 @@ python-dotenv>=1.0       # API-Keys aus der .env-Datei laden
 requests>=2.32           # mit Supabase sprechen (Phase 3/5)
 soundcard>=0.4.6         # PC-Ton per WASAPI-Loopback aufnehmen (Phase 5)
 soundfile>=0.13          # Meeting-Stücke als Opus speichern (Phase 5)
+pywin32>=306             # Windows: Zwischenablage mit allen Formaten, aktives Fenster, Desktop-Verknüpfung (.lnk)
+psutil>=6                # Programmname zum aktiven Fenster (für Stile pro App und Statistik)
+uiautomation>=2.0        # markierten Text und Feldinhalt lesen (Command Mode, Kontext)
 
 # Nur für die Entwicklung
 pytest>=8
