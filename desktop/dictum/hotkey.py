@@ -7,8 +7,9 @@ Aufgeteilt in zwei Teile:
    Aufnahme startet, endet oder verworfen wird. Weil sie nichts von der echten
    Tastatur weiß, kann man sie leicht testen (siehe tests/test_hotkey.py).
 
-2. `HotkeyListener` – hört mit `pynput` systemweit auf die Tastatur, merkt sich,
-   welche Tasten gerade gedrückt sind, und meldet das an die Zustandsmaschine.
+2. `HotkeyListener` – hört mit `pynput` systemweit auf Tastatur (und bei Bedarf Maus),
+   merkt sich, welche Tasten gerade gedrückt sind, und meldet das an die Zustandsmaschine.
+   Welche Taste wie heißt, steht in `keys.py`.
 
 Die Zustände:
 
@@ -20,6 +21,7 @@ Die Zustände:
 
 Wird während PRESSED eine andere Taste gedrückt (z. B. C, weil man mit der rechten
 Strg-Taste Strg+C drücken wollte), war das kein Diktat → Aufnahme wird verworfen (cancel).
+Esc bricht jede laufende Aufnahme ab (`escape`), auch eine angetippte.
 """
 
 from __future__ import annotations
@@ -29,7 +31,9 @@ import logging
 import time
 from typing import Callable
 
-from pynput import keyboard
+from pynput import keyboard, mouse
+
+from .keys import GROUPS, CaptureState, canonical, expand, hotkey_label  # noqa: F401
 
 log = logging.getLogger(__name__)
 
@@ -85,6 +89,15 @@ class HotkeyStateMachine:
             self.state = State.WAIT_RELEASE
             self.on_cancel()
 
+    def escape(self) -> None:
+        """Esc: laufende Aufnahme verwerfen. Ohne Aufnahme tut es nichts (Esc bleibt normal)."""
+        if self.state == State.PRESSED:
+            self.state = State.WAIT_RELEASE  # Tasten sind noch unten: erst loslassen lassen
+            self.on_cancel()
+        elif self.state == State.TOGGLED:
+            self.state = State.IDLE
+            self.on_cancel()
+
     def _is_tap(self, held: float) -> bool:
         if self.mode == "hold":
             return False  # jedes Loslassen beendet die Aufnahme
@@ -93,88 +106,201 @@ class HotkeyStateMachine:
         return held < self.hold_threshold
 
 
-# --- Verbindung zur echten Tastatur -------------------------------------------------
-
-# Welche echten Tasten hinter einem Namen aus settings.toml stehen.
-# - Gruppen ("ctrl") meinen die linke ODER rechte Taste.
-# - Einzeltasten ("ctrl_r") meinen genau eine Seite. Praktisch, weil z. B. die rechte
-#   Strg-Taste im Alltag kaum benutzt wird und sich gut als Ein-Tasten-Hotkey eignet.
-K = keyboard.Key
-KEY_MAP: dict[str, set] = {
-    "ctrl": {K.ctrl, K.ctrl_l, K.ctrl_r},
-    "win": {K.cmd, K.cmd_l, K.cmd_r},
-    "alt": {K.alt, K.alt_l, K.alt_r, K.alt_gr},
-    "shift": {K.shift, K.shift_l, K.shift_r},
-    "ctrl_l": {K.ctrl_l},
-    "ctrl_r": {K.ctrl_r},
-    "alt_l": {K.alt_l},
-    "shift_l": {K.shift_l},
-    "shift_r": {K.shift_r},
-    **{f"f{n}": {getattr(K, f"f{n}")} for n in range(1, 13)},
-}
-
-# Für Tray-Tooltip und Menü
-KEY_LABELS: dict[str, str] = {
-    "ctrl": "Strg", "win": "Win", "alt": "Alt", "shift": "Umschalt",
-    "ctrl_l": "Strg links", "ctrl_r": "Strg rechts", "alt_l": "Alt links",
-    "shift_l": "Umschalt links", "shift_r": "Umschalt rechts",
-    **{f"f{n}": f"F{n}" for n in range(1, 13)},
-}
-
-
-def hotkey_label(keys: list[str]) -> str:
-    return "+".join(KEY_LABELS[k] for k in keys)
+# --- Verbindung zur echten Tastatur und Maus ------------------------------------------
 
 # Eine Taste, die es auf keiner Tastatur gibt. Wir "drücken" sie, während die
 # Win-Taste gehalten wird. Sonst denkt Windows beim Loslassen, Win wurde allein
 # gedrückt, und öffnet das Startmenü. (Gleicher Trick wie bei AutoHotkey.)
 _MASK_KEY = keyboard.KeyCode.from_vk(0xE8)
+_MASK_NAME = "vk_232"
+_WIN_NAMES = GROUPS["win"]
+
+
+class _Combo:
+    """Eine Tastenkombination und der Stand, wie viel davon gerade gedrückt ist."""
+
+    def __init__(self, keys: list[str], on_down: Callable[[], None],
+                 on_up: Callable[[], None] | None = None) -> None:
+        self.keys = list(keys)
+        self.on_down = on_down
+        self.on_up = on_up
+        self.down: set[str] = set()   # welche Namen aus `keys` gerade gedrückt sind
+        self.active = False
+
+    def match(self, name: str) -> str | None:
+        """Zu welchem Namen aus settings.toml gehört die konkrete Taste? None = zu keinem."""
+        for configured in self.keys:
+            if name in expand(configured):
+                return configured
+        return None
+
+    @property
+    def uses_win(self) -> bool:
+        return any(expand(k) & _WIN_NAMES for k in self.keys)
+
+    @property
+    def uses_mouse(self) -> bool:
+        return any(k.startswith("mouse_") for k in self.keys)
 
 
 class HotkeyListener:
+    """Hört systemweit auf Tastatur und (bei Bedarf) Maustasten.
+
+    Das Diktat-Hotkey läuft über die Zustandsmaschine. Weitere Kombinationen (z. B. "letztes
+    Diktat einfügen") sind einfache Auslöser: Sobald die Kombination komplett gedrückt ist,
+    wird ihre Funktion einmal aufgerufen. Tasten lassen sich zur Laufzeit austauschen
+    (`set_keys`, `set_trigger`) – ein Neustart ist dafür nicht nötig.
+    """
+
     def __init__(self, keys: list[str], machine: HotkeyStateMachine) -> None:
-        self.keys = set(keys)
         self.machine = machine
-        self._down: set[str] = set()  # welche Hotkey-Tasten gerade gedrückt sind
-        self._combo_active = False
+        self._main = _Combo(keys, lambda: machine.combo_down(time.monotonic()),
+                            lambda: machine.combo_up(time.monotonic()))
+        self._triggers: dict[str, _Combo] = {}
         self._controller = keyboard.Controller()
-        self._listener = keyboard.Listener(on_press=self._on_press, on_release=self._on_release)
+        self._keyboard = keyboard.Listener(on_press=self._on_press, on_release=self._on_release)
+        self._mouse: mouse.Listener | None = None
+        self.enabled = True
+
+    def set_enabled(self, enabled: bool) -> None:
+        """Pausieren (z. B. während der Dialog "Taste wählen" offen ist). Beim Wechsel wird
+        gemerkt Gedrücktes vergessen, damit nach der Pause nichts hängen bleibt."""
+        self.enabled = enabled
+        for combo in [self._main, *self._triggers.values()]:
+            combo.down.clear()
+            combo.active = False
+
+    @property
+    def keys(self) -> set[str]:
+        return set(self._main.keys)
 
     def start(self) -> None:
-        self._listener.start()  # läuft in einem eigenen Hintergrund-Thread
+        self._keyboard.start()  # läuft in einem eigenen Hintergrund-Thread
+        self._sync_mouse()
 
     def stop(self) -> None:
-        self._listener.stop()
+        self._keyboard.stop()
+        if self._mouse:
+            self._mouse.stop()
+
+    def set_keys(self, keys: list[str]) -> None:
+        """Neue Diktat-Taste ab sofort."""
+        self._main = _Combo(keys, self._main.on_down, self._main.on_up)
+        self._sync_mouse()
+
+    def set_trigger(self, trigger_id: str, keys: list[str], callback: Callable[[], None]) -> None:
+        """Eine Zusatz-Kombination anlegen oder ändern. Leere Liste = ausschalten."""
+        if keys:
+            self._triggers[trigger_id] = _Combo(keys, callback)
+        else:
+            self._triggers.pop(trigger_id, None)
+        self._sync_mouse()
 
     def name_for(self, key) -> str | None:
         """Zu welcher Hotkey-Taste gehört diese echte Taste? None = gehört nicht dazu."""
-        for name in self.keys:
-            if key in KEY_MAP[name]:
-                return name
-        return None
+        name = canonical(key)
+        return self._main.match(name) if name else None
+
+    # --- Ereignisse -------------------------------------------------------------------
 
     def _on_press(self, key) -> None:
-        if key == _MASK_KEY:
-            return  # unser eigener Trick-Tastendruck
-        name = self.name_for(key)
-        if name is None:
-            # Eine "fremde" Taste: Teil einer anderen Tastenkombination
-            self.machine.other_key()
-            return
-        self._down.add(name)
-        # _combo_active verhindert, dass die automatische Tastenwiederholung beim
-        # Gedrückthalten immer wieder neue Aufnahmen startet
-        if not self._combo_active and self._down == self.keys:
-            self._combo_active = True
-            if "win" in self.keys:
-                self._controller.tap(_MASK_KEY)
-            self.machine.combo_down(time.monotonic())
+        self._press(canonical(key))
 
     def _on_release(self, key) -> None:
-        name = self.name_for(key)
-        if name is None:
+        self._release(canonical(key))
+
+    def _on_click(self, _x, _y, button, pressed) -> None:
+        (self._press if pressed else self._release)(canonical(button))
+
+    def _press(self, name: str | None) -> None:
+        if name == _MASK_NAME or not self.enabled:
+            return  # unser eigener Trick-Tastendruck bzw. pausiert
+        if name == "esc":
+            self.machine.escape()
+        for combo in list(self._triggers.values()):
+            self._combo_press(combo, name)
+        if not self._combo_press(self._main, name):
+            # Eine "fremde" Taste: Teil einer anderen Tastenkombination
+            self.machine.other_key()
+
+    def _combo_press(self, combo: _Combo, name: str | None) -> bool:
+        configured = combo.match(name) if name else None
+        if configured is None:
+            return False
+        combo.down.add(configured)
+        # `active` verhindert, dass die automatische Tastenwiederholung beim
+        # Gedrückthalten immer wieder neu auslöst
+        if not combo.active and combo.down == set(combo.keys):
+            combo.active = True
+            if combo.uses_win:
+                self._controller.tap(_MASK_KEY)
+            combo.on_down()
+        return True
+
+    def _release(self, name: str | None) -> None:
+        if not name or not self.enabled:
             return
-        self._down.discard(name)
-        if self._combo_active:
-            self._combo_active = False
-            self.machine.combo_up(time.monotonic())
+        for combo in [self._main, *self._triggers.values()]:
+            configured = combo.match(name)
+            if configured is None:
+                continue
+            combo.down.discard(configured)
+            if combo.active:
+                combo.active = False
+                if combo.on_up:
+                    combo.on_up()
+
+    # --- Maus -------------------------------------------------------------------------
+
+    def _sync_mouse(self) -> None:
+        """Den Maus-Hook nur laufen lassen, wenn eine Maustaste belegt ist: Ein globaler
+        Maus-Hook bremst sonst ohne Grund jede Mausbewegung ein wenig."""
+        needed = self._main.uses_mouse or any(c.uses_mouse for c in self._triggers.values())
+        running = self._mouse is not None
+        if needed and not running and self._keyboard.running:
+            self._mouse = mouse.Listener(on_click=self._on_click)
+            self._mouse.start()
+        elif not needed and running:
+            self._mouse.stop()
+            self._mouse = None
+
+
+class KeyCapture:
+    """Hört auf die nächste Tastenkombination (für den Dialog "Taste ändern").
+
+    `on_update(keys)` meldet laufend, was gerade gedrückt ist, `on_done(keys)` die fertige
+    Kombination, sobald alles losgelassen ist. Beide Rückrufe kommen aus einem
+    Hintergrund-Thread.
+    """
+
+    def __init__(self, on_update: Callable[[list[str]], None], on_done: Callable[[list[str]], None]) -> None:
+        self._state = CaptureState()
+        self._on_update = on_update
+        self._on_done = on_done
+        self._finished = False
+        self._keyboard = keyboard.Listener(on_press=lambda k: self._press(canonical(k)),
+                                           on_release=lambda k: self._release(canonical(k)))
+        self._mouse = mouse.Listener(
+            on_click=lambda _x, _y, b, pressed: (self._press if pressed else self._release)(canonical(b)))
+
+    def start(self) -> None:
+        self._keyboard.start()
+        self._mouse.start()
+
+    def stop(self) -> None:
+        self._keyboard.stop()
+        self._mouse.stop()
+
+    def _press(self, name: str | None) -> None:
+        if not name or self._finished:
+            return
+        self._state.press(name)
+        self._on_update(self._state.current)
+
+    def _release(self, name: str | None) -> None:
+        if not name or self._finished:
+            return
+        done = self._state.release(name)
+        if done is not None:
+            self._finished = True
+            self._on_done(done)

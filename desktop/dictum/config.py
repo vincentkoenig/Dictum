@@ -16,16 +16,13 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from .keys import check_hotkey
+
 # settings.toml liegt im Ordner desktop/, also eine Ebene über diesem Paket
 DESKTOP_DIR = Path(__file__).resolve().parent.parent
 REPO_ROOT = DESKTOP_DIR.parent
 DEFAULT_PATH = DESKTOP_DIR / "settings.toml"
 
-VALID_KEYS = {
-    "ctrl", "win", "alt", "shift",                      # linke ODER rechte Taste
-    "ctrl_l", "ctrl_r", "alt_l", "shift_l", "shift_r",  # genau eine Seite
-    *(f"f{n}" for n in range(1, 13)),                   # F1 … F12
-}
 VALID_MODES = {"both", "hold", "toggle"}
 VALID_ENGINES = {"local", "openai"}
 VALID_PROVIDERS = {"anthropic", "openai"}
@@ -36,6 +33,9 @@ class HotkeySettings:
     keys: list[str] = field(default_factory=lambda: ["ctrl_r"])
     mode: str = "both"
     hold_threshold: float = 0.4
+    # Zusatz-Tasten wie bei Wispr Flow (leere Liste = aus): letztes Diktat erneut einfügen / kopieren
+    paste_last: list[str] = field(default_factory=lambda: ["shift", "alt", "z"])
+    copy_last: list[str] = field(default_factory=lambda: ["shift", "alt", "x"])
 
 
 @dataclass
@@ -117,11 +117,14 @@ def _validate(settings: Settings) -> None:
     """Prüft früh auf ungültige Werte – lieber eine klare Fehlermeldung beim Start
     als ein rätselhafter Fehler mitten im Diktat."""
     hk = settings.hotkey
-    unknown = set(hk.keys) - VALID_KEYS
-    if unknown:
-        raise ValueError(f"Unbekannte Hotkey-Taste(n): {unknown}. Erlaubt: {VALID_KEYS}")
-    if len(hk.keys) < 1:
-        raise ValueError("Mindestens eine Hotkey-Taste angeben.")
+    for name, keys, optional in (("keys", hk.keys, False), ("paste_last", hk.paste_last, True),
+                                 ("copy_last", hk.copy_last, True)):
+        problem = check_hotkey(keys, allow_empty=optional)
+        if problem:
+            raise ValueError(f"hotkey.{name}: {problem}")
+    chosen = [tuple(sorted(k)) for k in (hk.keys, hk.paste_last, hk.copy_last) if k]
+    if len(chosen) != len(set(chosen)):
+        raise ValueError("Jede Tastenkombination darf nur einmal vergeben werden.")
     if hk.mode not in VALID_MODES:
         raise ValueError(f"Ungültiger Modus '{hk.mode}'. Erlaubt: {VALID_MODES}")
     if hk.hold_threshold <= 0:

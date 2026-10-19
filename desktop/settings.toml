@@ -2,10 +2,15 @@
 # Änderungen werden beim nächsten Start übernommen.
 
 [hotkey]
-# Taste(n), die gedrückt werden. Mehrere = gemeinsam drücken, z. B. ["win", "alt"].
+# Taste(n), die gedrückt werden. Am einfachsten im Dictum-Fenster: Einstellungen → "Ändern …"
+# und die gewünschte Taste drücken. In der Datei sind es Namen, mehrere = gemeinsam drücken:
 #   Gruppen (links oder rechts): "ctrl", "win", "alt", "shift"
-#   Genau eine Seite:            "ctrl_l", "ctrl_r", "alt_l", "shift_l", "shift_r"
-#   Funktionstasten:             "f1" … "f12"
+#   Genau eine Seite:            "ctrl_r", "shift_l", "win_r" …
+#   Funktionstasten:             "f1" … "f24"
+#   Sondertasten:                "caps_lock", "pause", "insert", "scroll_lock", "menu" …
+#   Buchstaben/Ziffern:          nur mit Strg/Alt/Umschalt/Win zusammen, z. B. ["ctrl", "alt", "d"]
+#   Maustasten:                  "mouse_middle", "mouse_x1", "mouse_x2"
+#   Andere Tasten per Code:      "vk_173" (Windows-Tastencode)
 # Nicht empfohlen: "ctrl"+"alt" (= AltGr, z. B. für @ und €), "ctrl"+"shift"
 # (wechselt oft das Tastaturlayout), "alt_r" (ist AltGr auf deutschen Tastaturen).
 keys = ["ctrl_r"]
@@ -17,6 +22,12 @@ mode = "both"
 
 # Ab wie vielen Sekunden Drücken gilt es als "Halten" statt "Antippen"
 hold_threshold = 0.4
+
+# Zusatz-Tasten wie bei Wispr Flow ([] = aus):
+# Das letzte Diktat noch einmal einfügen bzw. nur in die Zwischenablage kopieren.
+# Esc bricht eine laufende Aufnahme jederzeit ab (fest eingebaut).
+paste_last = ["shift", "alt", "z"]
+copy_last = ["shift", "alt", "x"]
 
 [transcription]
 # Wo die Sprache erkannt wird (im Tray-Menü umschaltbar):
