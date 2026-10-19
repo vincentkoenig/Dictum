@@ -57,7 +57,8 @@ egal ob Word, Browser, Outlook oder Slack. Dieses Dokument erklärt, wie das fun
 | `gui/overlay.py` | Flow Bar | Blase unten in der Mitte: Ruhe, Hover, Status, Klick = diktieren |
 | `sounds.py` | Töne | eigener sanfter Ton in einstellbarer Lautstärke |
 | `gui/tray.py` | Symbol im Infobereich | Menü wird vor dem Aufklappen synchronisiert |
-| `gui/window.py` | Dictum-Fenster | Reiter Start, Verlauf, Einstellungen, Info |
+| `gui/window.py` | Dictum-Fenster | Seitenleiste, Karte mit der Seite, Einstellungen als Dialog |
+| `gui/theme.py` | Aussehen | Farben hell/dunkel, Stylesheet, Serifen-Überschriften |
 | `shortcuts.py` | Desktop-Symbol, Startmenü | `.lnk` mit Symbol und AppUserModelID |
 | `context.py` | Aktives Programm | Vordergrundfenster → Prozessname (Win32 + psutil) |
 | `costs.py` | Kostenschätzung | Preise je Modell, Token grob aus der Textlänge |
@@ -506,6 +507,33 @@ Dafür gibt es Tests der Menü-Logik und von `apply_settings`, aber keinen Klick
   und ein Anheften bleibt zugeordnet.
 - **Ordner:** Der Desktop liegt oft in OneDrive. Deshalb fragt Dictum Windows (`SHGetFolderPath`), statt
   `~/Desktop` zu raten. Die Tests legen Verknüpfungen nur in Wegwerf-Ordnern an.
+
+### Das Fenster im Stil von Wispr Flow (`gui/window.py`, `gui/theme.py`)
+
+Statt Reitern gibt es jetzt eine **Seitenleiste** und rechts eine weiße **Karte** mit der aktuellen Seite:
+
+| Seite | Inhalt |
+|---|---|
+| **Diktat** | Status, Banner „Stile einrichten“, Verlauf mit Suche (Zeit als „Heute 11:07“), rechts Kennzahlen |
+| **Meetings** | Aufnahme starten/beenden, letztes Meeting, Einrichtungs-Check |
+| **Statistik** | Wörter, Tempo, Serie, gespart, Kosten, Tagesdiagramm, Top-Programme |
+| **Wörterbuch** / **Textbausteine** | die beiden Listen, jetzt getrennt (Lern-Schalter beim Wörterbuch) |
+| **Stile** | Stil je Programmart, eigene Zuordnung, Kontext für die KI |
+| **Notizblock** | Textfeld zum Ausprobieren des Diktats, bleibt gespeichert (`notizblock.txt`) |
+| **Einstellungen** (unten links) | eigener Dialog mit Navigation: Allgemein, Erkennung & KI, Schlüssel, Datenschutz & System, Meetings, Info |
+
+**Aussehen (`theme.py`):** Drei Dinge zusammen sorgen dafür, dass es überall gleich aussieht: der Qt-Stil
+„Fusion“ (Qt zeichnet die Bedienelemente selbst), eine `QPalette` mit den Grundfarben und ein Stylesheet für
+Rundungen, Karten und Knöpfe. Die Farben stehen in einer Tabelle je Modus, Umschalten heißt „andere Tabelle
+einsetzen“. Überschriften sind Serifenschrift (Georgia), der Rest Segoe UI. Die Symbole der Seitenleiste sind
+selbst gemalt (`icons.nav_icon`), damit sie nicht von einer Symbolschrift abhängen, die es nicht überall gibt.
+
+**Hell/Dunkel:** Der Mond/Sonne-Knopf oben rechts schaltet um und speichert `[ui] theme`. Mögliche Werte:
+`system` (folgt Windows, Standard), `light`, `dark`. Auch unter Einstellungen → Allgemein → Darstellung.
+
+**Technik:** Jede Seite steckt in einem Scrollbereich (kleine Fenster schneiden nichts ab) und hat eine
+`refresh()`. Ein Zeitgeber ruft sie nur für die sichtbare Seite auf. Die Auswertung der Statistik auf der Startseite
+läuft höchstens alle 5 Sekunden, weil sie den ganzen Verlauf liest.
 
 ### Flow Bar und Töne (`gui/overlay.py`, `sounds.py`)
 

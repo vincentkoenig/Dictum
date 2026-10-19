@@ -142,6 +142,7 @@ class FeedbackSettings:
 @dataclass
 class UiSettings:
     flow_bar: bool = True       # dauerhaft sichtbare Blase unten in der Bildschirmmitte
+    theme: str = "system"       # "system" (wie Windows), "light" oder "dark"
 
 
 @dataclass
@@ -211,6 +212,8 @@ def _validate(settings: Settings) -> None:
     for exe, style in st.apps.items():
         if style not in STYLES:
             raise ValueError(f"Ungültiger Stil '{style}' für {exe}. Erlaubt: {set(STYLES)}")
+    if settings.ui.theme not in ("system", "light", "dark"):
+        raise ValueError(f"Ungültiges Design '{settings.ui.theme}'. Erlaubt: system, light, dark")
     if not 0 <= settings.feedback.sound_volume <= 100:
         raise ValueError("feedback.sound_volume muss zwischen 0 und 100 liegen.")
     if settings.dictionary.learn_delay < 1:

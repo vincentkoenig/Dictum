@@ -1,39 +1,61 @@
-"""Das Dictum-Fenster: Status, Meeting-Steuerung, Verlauf, Einstellungen.
+"""Das Dictum-Fenster im Stil von Wispr Flow: Seitenleiste, Karte mit der aktuellen Seite, Einstellungen als Dialog.
 
 Dictum ist weiterhin eine Tray-Anwendung. Das Fenster ist die Schaltzentrale, die man bei
 Bedarf aufmacht (Linksklick auf das Tray-Symbol oder Tray → "Dictum öffnen"). Schließt man es,
 läuft Dictum im Hintergrund weiter. Nur Tray → "Beenden" beendet das Programm.
 
-Aufbau: Jeder Reiter ist eine eigene Klasse mit einer `refresh()`-Methode. Ein Zeitgeber im
-Hauptfenster ruft sie jede Sekunde auf, aber nur, solange das Fenster sichtbar ist. Das
-Fenster verändert nie selbst den Zustand der App: Es ruft nur Methoden von `DictumApp` auf
-(`set`, `apply_settings`, `restart` …) und liest von dort.
+Aufbau:
+
+    ┌───────────┬──────────────────────────────────────────┐
+    │ Dictum    │                                  ☾       │   ← Dunkelmodus-Schalter
+    │ Diktat    │  ┌────────────────────────────────────┐  │
+    │ Meetings  │  │ Überschrift (Serife)               │  │
+    │ Statistik │  │ aktuelle Seite                     │  │
+    │ Wörterb.  │  └────────────────────────────────────┘  │
+    │ Bausteine │                                          │
+    │ Stile     │                                          │
+    │ Notizblock│                                          │
+    │ ⚙ Einstell.                                          │
+    └───────────┴──────────────────────────────────────────┘
+
+Jede Seite ist eine eigene Klasse mit einer `refresh()`-Methode. Ein Zeitgeber im Hauptfenster ruft sie
+jede Sekunde auf, aber nur für die sichtbare Seite und nur, solange das Fenster sichtbar ist. Das Fenster
+verändert nie selbst den Zustand der App: Es ruft nur Methoden von `DictumApp` auf (`set`,
+`apply_settings`, `restart` …) und liest von dort. Farben und Rundungen stehen in theme.py.
 """
 
 from __future__ import annotations
 
 import os
 import time
+from datetime import date, datetime
 
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QFont, QGuiApplication
+from PySide6.QtCore import QSize, Qt, QTimer
+from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QApplication,
+    QButtonGroup,
     QCheckBox,
     QComboBox,
+    QDialog,
     QFormLayout,
+    QFrame,
     QGroupBox,
     QHBoxLayout,
     QHeaderView,
     QLabel,
     QLineEdit,
+    QListWidget,
     QMainWindow,
     QMessageBox,
+    QPlainTextEdit,
     QPushButton,
+    QScrollArea,
     QSpinBox,
+    QStackedWidget,
     QTableWidget,
     QTableWidgetItem,
-    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -43,11 +65,10 @@ from ..config import DEFAULT_PATH, DESKTOP_DIR, REPO_ROOT
 from ..history import DB_PATH
 from ..logsetup import LOG_PATH
 from ..settings_io import save_settings
+from . import theme
 from .dictionary_tab import DictionaryTab
 from .hotkey_field import HotkeyField
-from .icons import mic_icon
-from .stats_tab import StatsTab
-from .styles_tab import StylesTab
+from .icons import mic_icon, nav_icon
 from .labels import (
     ENGINE_LABELS,
     LANGUAGE_LABELS,
@@ -57,11 +78,22 @@ from .labels import (
     OPENAI_STT_MODELS,
     PROVIDER_LABELS,
     TEMPLATE_LABELS,
+    THEME_LABELS,
 )
+from .stats_tab import StatsTab, de
+from .styles_tab import StylesTab
+
+NOTEPAD_PATH = DESKTOP_DIR / "notizblock.txt"
+
+
+def _named(label: QLabel, name: str) -> QLabel:
+    label.setObjectName(name)
+    return label
 
 
 def _muted(label: QLabel) -> QLabel:
-    label.setStyleSheet("color: palette(placeholder-text);")
+    label.setObjectName("muted")
+    label.setWordWrap(True)
     return label
 
 
@@ -76,29 +108,217 @@ def _select(combo: QComboBox, value) -> None:
         combo.setCurrentIndex(index)
 
 
+def friendly_time(moment: datetime, today: date | None = None) -> str:
+    """"Heute 11:07", "Gestern 17:56" oder "15.10. 17:56"."""
+    today = today or date.today()
+    days = (today - moment.date()).days
+    clock = moment.strftime("%H:%M")
+    if days == 0:
+        return f"Heute {clock}"
+    if days == 1:
+        return f"Gestern {clock}"
+    return f"{moment:%d.%m.} {clock}"
+
+
 # ======================================================================================
-# Reiter 1: Start
+# Seite: Diktat (Startseite)
 # ======================================================================================
 
-class StartTab(QWidget):
+class HistoryTab(QWidget):
+    """Verlauf mit Suche. Doppelklick kopiert einen Eintrag."""
+
+    def __init__(self, app) -> None:
+        super().__init__()
+        self.app = app
+        self._shown: tuple = ()
+
+        self.search = QLineEdit()
+        self.search.setPlaceholderText("Verlauf durchsuchen …")
+        self.search.setClearButtonEnabled(True)
+        self.search.textChanged.connect(lambda _t: self.refresh(force=True))
+
+        self.table = QTableWidget(0, 2)
+        self.table.setHorizontalHeaderLabels(["Zeit", "Text"])
+        self.table.verticalHeader().setVisible(False)
+        self.table.setShowGrid(False)
+        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.table.setWordWrap(True)
+        self.table.setMinimumHeight(220)
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.table.cellDoubleClicked.connect(lambda _r, _c: self.copy_selected())
+
+        self.copy_btn = QPushButton("Kopieren")
+        self.copy_btn.clicked.connect(self.copy_selected)
+        self.clear_btn = QPushButton("Alle löschen …")
+        self.clear_btn.clicked.connect(self._clear)
+        self.message = _muted(QLabel(
+            "Doppelklick kopiert einen Eintrag. Der Verlauf bleibt nur auf diesem PC."
+        ))
+
+        bottom = QHBoxLayout()
+        bottom.addWidget(self.copy_btn)
+        bottom.addWidget(self.clear_btn)
+        bottom.addWidget(self.message, 1)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.search)
+        layout.addWidget(self.table, 1)
+        layout.addLayout(bottom)
+        self.refresh(force=True)
+
+    def refresh(self, force: bool = False) -> None:
+        if not self.app.settings.history.enabled:
+            self.table.setRowCount(0)
+            self.message.setText("Der Verlauf ist ausgeschaltet (Einstellungen → Verlauf speichern).")
+            return
+        entries = self.app.history.recent(300, self.search.text())
+        signature = tuple(e.id for e in entries)
+        if signature == self._shown and not force:
+            return  # nichts Neues: Auswahl und Scrollposition nicht stören
+        self._shown = signature
+        self.table.setRowCount(len(entries))
+        for row, entry in enumerate(entries):
+            time_item = QTableWidgetItem(friendly_time(entry.created_at))
+            time_item.setData(Qt.ItemDataRole.UserRole, entry.text)
+            self.table.setItem(row, 0, time_item)
+            self.table.setItem(row, 1, QTableWidgetItem(entry.text))
+        self.table.resizeRowsToContents()
+
+    def copy_selected(self) -> None:
+        row = self.table.currentRow()
+        if row < 0:
+            self.message.setText("Erst einen Eintrag auswählen.")
+            return
+        QGuiApplication.clipboard().setText(self.table.item(row, 0).data(Qt.ItemDataRole.UserRole))
+        self.message.setText("In die Zwischenablage kopiert.")
+
+    def _clear(self) -> None:
+        answer = QMessageBox.question(
+            self, "Verlauf löschen", "Den gesamten Diktat-Verlauf endgültig löschen?",
+        )
+        if answer == QMessageBox.StandardButton.Yes:
+            count = self.app.history.delete_all()
+            self.message.setText(f"{count} Einträge gelöscht.")
+            self.refresh(force=True)
+
+
+class HomeTab(QWidget):
+    """Startseite: Status, Banner, Verlauf und rechts die Kennzahlen."""
+
+    STATS_EVERY = 5.0  # Sekunden: Die Auswertung liest den ganzen Verlauf, das nicht jede Sekunde
+
+    def __init__(self, app, on_styles=lambda: None) -> None:
+        super().__init__()
+        self.app = app
+        self._stats_at = 0.0
+
+        self.status = QLabel()
+        self.status.setStyleSheet("font-size: 13pt; font-weight: 600;")
+        self.info = _muted(QLabel())
+        self.today = _muted(QLabel())
+
+        hero = QFrame()
+        hero.setObjectName("hero")
+        hero_layout = QVBoxLayout(hero)
+        hero_layout.setContentsMargins(28, 24, 28, 24)
+        hero_layout.addWidget(_named(QLabel("Mach Dictum zu deiner Stimme"), "herotitle"))
+        hero_layout.addWidget(_named(QLabel("Stelle verschiedene Schreibstile für verschiedene Programme ein."), "herosub"))
+        hero_layout.addSpacing(8)
+        self.hero_btn = QPushButton("Jetzt einrichten")
+        self.hero_btn.setObjectName("herobtn")
+        self.hero_btn.clicked.connect(on_styles)
+        row = QHBoxLayout()
+        row.addWidget(self.hero_btn)
+        row.addStretch(1)
+        hero_layout.addLayout(row)
+
+        self.history = HistoryTab(app)
+
+        # Kennzahlen rechts
+        self.words = _named(QLabel("0"), "bignum")
+        self.wpm = _named(QLabel("–"), "bignum")
+        self.streak = _named(QLabel("0"), "bignum")
+        stat = QFrame()
+        stat.setObjectName("stat")
+        stat_layout = QVBoxLayout(stat)
+        stat_layout.setContentsMargins(20, 18, 20, 18)
+        for number, caption in ((self.words, "Wörter gesamt"), (self.wpm, "Wörter pro Minute"),
+                                (self.streak, "Tage in Folge")):
+            stat_layout.addWidget(number)
+            stat_layout.addWidget(_muted(QLabel(caption)))
+            stat_layout.addSpacing(8)
+        stat_layout.addStretch(1)
+        stat.setFixedWidth(230)
+
+        left = QVBoxLayout()
+        left.addWidget(self.status)
+        left.addWidget(self.info)
+        left.addWidget(self.today)
+        left.addSpacing(6)
+        left.addWidget(hero)
+        left.addSpacing(10)
+        left.addWidget(self.history, 1)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(18)
+        layout.addLayout(left, 1)
+        layout.addWidget(stat, 0, Qt.AlignmentFlag.AlignTop)
+        self.refresh()
+
+    def refresh(self, force: bool = False) -> None:
+        app, meetings = self.app, self.app.meetings
+        if meetings.is_recording:
+            minutes, seconds = divmod(int(meetings.elapsed), 60)
+            self.status.setText(f"● Meeting läuft – {minutes:02d}:{seconds:02d}")
+            self.status.setStyleSheet("font-size: 13pt; font-weight: 600; color: #e5484d;")
+        elif app.engine == "local" and not app.local.is_ready:
+            self.status.setText("Whisper-Modell wird geladen …")
+            self.status.setStyleSheet("font-size: 13pt; font-weight: 600;")
+        else:
+            self.status.setText(f"Bereit – {app.hotkey_text} halten und sprechen")
+            self.status.setStyleSheet("font-size: 13pt; font-weight: 600;")
+
+        cleanup = f"an ({PROVIDER_LABELS[app.get('provider')]})" if app.get("cleanup") else "aus"
+        self.info.setText(
+            f"Spracherkennung: {ENGINE_LABELS[app.get('engine')]} · "
+            f"Sprache: {LANGUAGE_LABELS[app.get('language')]} · KI-Bereinigung: {cleanup}"
+        )
+        enabled = app.settings.history.enabled
+        count, words = app.history.today() if enabled else (0, 0)
+        self.today.setText(
+            f"Heute: {count} {'Diktat' if count == 1 else 'Diktate'}, {words} Wörter"
+            if enabled else "Verlauf ist ausgeschaltet"
+        )
+        self.history.refresh(force=force)
+        if enabled and (force or time.monotonic() - self._stats_at > self.STATS_EVERY):
+            self._stats_at = time.monotonic()
+            stats = app.history.stats()
+            self.words.setText(de(stats.words))
+            self.wpm.setText(de(stats.wpm) if stats.wpm else "–")
+            self.streak.setText(str(stats.streak))
+
+
+# ======================================================================================
+# Seite: Meetings
+# ======================================================================================
+
+class MeetingsTab(QWidget):
     def __init__(self, app) -> None:
         super().__init__()
         self.app = app
         self._checks_at = 0.0
 
         self.status = QLabel()
-        font = QFont()
-        font.setPointSize(16)
-        font.setBold(True)
-        self.status.setFont(font)
-        self.info = _muted(QLabel())
-        self.info.setWordWrap(True)
-        self.today = _muted(QLabel())
-
-        # Meeting
+        self.status.setStyleSheet("font-size: 13pt; font-weight: 600;")
         self.template = QComboBox()
         _fill(self.template, TEMPLATE_LABELS)
         self.meeting_btn = QPushButton()
+        self.meeting_btn.setProperty("primary", True)
         self.meeting_btn.clicked.connect(self._toggle_meeting)
         self.queue_label = _muted(QLabel())
         meeting_box = QGroupBox("Meeting aufnehmen (Mikrofon + PC-Ton)")
@@ -122,17 +342,15 @@ class StartTab(QWidget):
         buttons.addStretch(1)
         self.last_btn = last
 
-        # Einrichtung
         self.checks_label = QLabel()
         self.checks_label.setTextFormat(Qt.TextFormat.RichText)
         checks_box = QGroupBox("Einrichtung")
         QVBoxLayout(checks_box).addWidget(self.checks_label)
 
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.status)
-        layout.addWidget(self.info)
-        layout.addWidget(self.today)
-        layout.addSpacing(8)
+        layout.addSpacing(6)
         layout.addWidget(meeting_box)
         layout.addLayout(buttons)
         layout.addWidget(checks_box)
@@ -148,29 +366,14 @@ class StartTab(QWidget):
         self.refresh()
 
     def refresh(self) -> None:
-        app, meetings = self.app, self.app.meetings
+        meetings = self.app.meetings
         if meetings.is_recording:
             minutes, seconds = divmod(int(meetings.elapsed), 60)
             self.status.setText(f"● Meeting läuft – {minutes:02d}:{seconds:02d}")
-            self.status.setStyleSheet("color: #e5484d;")
-        elif app.engine == "local" and not app.local.is_ready:
-            self.status.setText("Whisper-Modell wird geladen …")
-            self.status.setStyleSheet("")
+            self.status.setStyleSheet("font-size: 13pt; font-weight: 600; color: #e5484d;")
         else:
-            self.status.setText(f"Bereit – {app.hotkey_text} halten und sprechen")
-            self.status.setStyleSheet("")
-
-        cleanup = f"an ({PROVIDER_LABELS[app.get('provider')]})" if app.get("cleanup") else "aus"
-        self.info.setText(
-            f"Spracherkennung: {ENGINE_LABELS[app.get('engine')]} · "
-            f"Sprache: {LANGUAGE_LABELS[app.get('language')]} · KI-Bereinigung: {cleanup}"
-        )
-        count, words = app.history.today() if app.settings.history.enabled else (0, 0)
-        self.today.setText(
-            f"Heute: {count} {'Diktat' if count == 1 else 'Diktate'}, {words} Wörter"
-            if app.settings.history.enabled else "Verlauf ist ausgeschaltet"
-        )
-
+            self.status.setText("Kein Meeting aktiv")
+            self.status.setStyleSheet("font-size: 13pt; font-weight: 600;")
         self.meeting_btn.setText("⏹ Meeting beenden" if meetings.is_recording else "🔴 Aufnahme starten")
         self.template.setEnabled(not meetings.is_recording)
         self.last_btn.setEnabled(meetings.last_recording_id is not None)
@@ -210,92 +413,91 @@ class StartTab(QWidget):
 
 
 # ======================================================================================
-# Reiter 2: Verlauf
+# Seite: Notizblock
 # ======================================================================================
 
-class HistoryTab(QWidget):
+class NotepadTab(QWidget):
+    """Ein Textfeld zum Ausprobieren: Hineinklicken und diktieren. Der Text bleibt gespeichert."""
+
+    def __init__(self, app, path=NOTEPAD_PATH) -> None:
+        super().__init__()
+        self.app = app
+        self.path = path
+        self.edit = QPlainTextEdit()
+        self.edit.setPlaceholderText("Klick hierher und diktiere. Der Text bleibt auf diesem PC gespeichert.")
+        try:
+            self.edit.setPlainText(path.read_text(encoding="utf-8"))
+        except OSError:
+            pass
+        self._save_timer = QTimer(self)
+        self._save_timer.setSingleShot(True)
+        self._save_timer.setInterval(700)  # nicht bei jedem Tastendruck schreiben
+        self._save_timer.timeout.connect(self.save)
+        self.edit.textChanged.connect(self._save_timer.start)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(_muted(QLabel(
+            "Hier kannst du Dictum ausprobieren, ohne ein anderes Programm zu öffnen: ins Feld klicken, Taste "
+            "drücken, sprechen."
+        )))
+        layout.addWidget(self.edit, 1)
+
+    def save(self) -> None:
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            self.path.write_text(self.edit.toPlainText(), encoding="utf-8")
+        except OSError:
+            pass
+
+
+# ======================================================================================
+# Einstellungen (als Dialog mit Navigation links)
+# ======================================================================================
+
+class InfoTab(QWidget):
     def __init__(self, app) -> None:
         super().__init__()
         self.app = app
-        self._shown: tuple = ()
+        title = _named(QLabel(f"Dictum {__version__}"), "h2")
 
-        self.search = QLineEdit()
-        self.search.setPlaceholderText("Verlauf durchsuchen …")
-        self.search.setClearButtonEnabled(True)
-        self.search.textChanged.connect(lambda _t: self.refresh(force=True))
+        paths = QLabel(
+            f"Einstellungen: {DEFAULT_PATH}<br>Logdatei: {LOG_PATH}<br>Verlauf: {DB_PATH}<br>"
+            f"Schlüssel (.env): {REPO_ROOT / '.env'}"
+        )
+        paths.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        _muted(paths)
 
-        self.table = QTableWidget(0, 2)
-        self.table.setHorizontalHeaderLabels(["Zeit", "Text"])
-        self.table.verticalHeader().setVisible(False)
-        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        self.table.setWordWrap(True)
-        header = self.table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        self.table.cellDoubleClicked.connect(lambda _r, _c: self.copy_selected())
+        def button(text: str, action) -> QPushButton:
+            b = QPushButton(text)
+            b.clicked.connect(action)
+            return b
 
-        self.copy_btn = QPushButton("Kopieren")
-        self.copy_btn.clicked.connect(self.copy_selected)
-        self.clear_btn = QPushButton("Alle löschen …")
-        self.clear_btn.clicked.connect(self._clear)
-        self.message = _muted(QLabel(
-            "Doppelklick kopiert einen Eintrag. Der Verlauf bleibt nur auf diesem PC."
-        ))
-
-        bottom = QHBoxLayout()
-        bottom.addWidget(self.copy_btn)
-        bottom.addWidget(self.clear_btn)
-        bottom.addWidget(self.message, 1)
+        row1 = QHBoxLayout()
+        row1.addWidget(button("Logdatei öffnen", app.open_log))
+        row1.addWidget(button("Programmordner öffnen", lambda: os.startfile(DESKTOP_DIR)))
+        row1.addStretch(1)
+        row2 = QHBoxLayout()
+        row2.addWidget(button("Wörterbuch-Datei öffnen", app.open_dictionary))
+        row2.addWidget(button("Snippets-Datei öffnen", app.open_snippets))
+        row2.addWidget(button("Mit Cloud abgleichen", app.meetings.sync_now))
+        row2.addStretch(1)
 
         layout = QVBoxLayout(self)
-        layout.addWidget(self.search)
-        layout.addWidget(self.table, 1)
-        layout.addLayout(bottom)
-        self.refresh(force=True)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(title)
+        layout.addWidget(_muted(QLabel("Diktieren, Gespräche aufnehmen und zusammenfassen.")))
+        layout.addSpacing(12)
+        layout.addLayout(row1)
+        layout.addLayout(row2)
+        layout.addSpacing(12)
+        layout.addWidget(paths)
+        layout.addStretch(1)
 
-    def refresh(self, force: bool = False) -> None:
-        if not self.app.settings.history.enabled:
-            self.table.setRowCount(0)
-            self.message.setText("Der Verlauf ist ausgeschaltet (Einstellungen → Verlauf speichern).")
-            return
-        entries = self.app.history.recent(300, self.search.text())
-        signature = tuple(e.id for e in entries)
-        if signature == self._shown and not force:
-            return  # nichts Neues: Auswahl und Scrollposition nicht stören
-        self._shown = signature
-        self.table.setRowCount(len(entries))
-        for row, entry in enumerate(entries):
-            time_item = QTableWidgetItem(entry.created_at.strftime("%d.%m. %H:%M"))
-            time_item.setData(Qt.ItemDataRole.UserRole, entry.text)
-            self.table.setItem(row, 0, time_item)
-            self.table.setItem(row, 1, QTableWidgetItem(entry.text))
-        self.table.resizeRowsToContents()
-
-    def copy_selected(self) -> None:
-        row = self.table.currentRow()
-        if row < 0:
-            self.message.setText("Erst einen Eintrag auswählen.")
-            return
-        QGuiApplication.clipboard().setText(self.table.item(row, 0).data(Qt.ItemDataRole.UserRole))
-        self.message.setText("In die Zwischenablage kopiert.")
-
-    def _clear(self) -> None:
-        answer = QMessageBox.question(
-            self, "Verlauf löschen", "Den gesamten Diktat-Verlauf endgültig löschen?",
-        )
-        if answer == QMessageBox.StandardButton.Yes:
-            count = self.app.history.delete_all()
-            self.message.setText(f"{count} Einträge gelöscht.")
-            self.refresh(force=True)
-
-
-# ======================================================================================
-# Reiter 3: Einstellungen
-# ======================================================================================
 
 class SettingsTab(QWidget):
+    """Alle Einstellungen. Links eine Navigation, rechts die Seiten; unten Speichern."""
+
     def __init__(self, app) -> None:
         super().__init__()
         self.app = app
@@ -337,6 +539,8 @@ class SettingsTab(QWidget):
         self.sound_volume.setRange(1, 100)
         self.sound_volume.setSuffix(" %")
         self.flow_bar = QCheckBox("Flow Bar anzeigen (Blase unten in der Bildschirmmitte)")
+        self.theme = QComboBox()
+        _fill(self.theme, THEME_LABELS)
         self.sys_audio = QCheckBox("PC-Ton aufnehmen (Teams, Zoom …)")
         self.chunk = QSpinBox()
         self.chunk.setRange(1, 10)
@@ -349,42 +553,45 @@ class SettingsTab(QWidget):
         self.autostart = QCheckBox("Mit Windows starten")
         self.desktop_shortcut = QCheckBox("Symbol auf dem Desktop")
         self.start_menu_shortcut = QCheckBox("Eintrag im Startmenü")
+        self.info = InfoTab(app)
 
-        diktat = QGroupBox("Diktieren")
-        form = QFormLayout(diktat)
+        # --- Seiten ---
+        allgemein = QWidget()
+        form = QFormLayout(allgemein)
         form.addRow("Diktier-Taste:", self.hotkey)
         form.addRow("Bedienung:", self.mode)
-        form.addRow("Sprache:", self.language)
-        form.addRow("Spracherkennung:", self.engine)
-        form.addRow("Lokales Modell:", self.model)
-        form.addRow(self.whisper)
-        form.addRow("Aufnahme endet nach:", self.max_minutes)
-        form.addRow("OpenAI-Modell (Erkennung):", self.openai_stt)
-        form.addRow(self.cleanup)
-        form.addRow("KI-Anbieter:", self.provider)
-        form.addRow("OpenAI-Modell (Bereinigung):", self.openai_cleanup)
-        form.addRow(self.sounds)
-        form.addRow("Lautstärke der Töne:", self.sound_volume)
-        form.addRow(self.flow_bar)
         form.addRow("Befehls-Taste (Text umschreiben):", self.command)
         form.addRow("Letztes Diktat einfügen:", self.paste_last)
         form.addRow("Letztes Diktat kopieren:", self.copy_last)
+        form.addRow("Sprache:", self.language)
+        form.addRow("Aufnahme endet nach:", self.max_minutes)
+        form.addRow(self.sounds)
+        form.addRow("Lautstärke der Töne:", self.sound_volume)
+        form.addRow(self.flow_bar)
+        form.addRow("Darstellung:", self.theme)
 
-        keys_box = QGroupBox("API-Schlüssel (nur in der Datei .env, nie im Repo)")
-        keys_layout = QVBoxLayout(keys_box)
+        erkennung = QWidget()
+        eform = QFormLayout(erkennung)
+        eform.addRow("Spracherkennung:", self.engine)
+        eform.addRow("Lokales Modell:", self.model)
+        eform.addRow("OpenAI-Modell (Erkennung):", self.openai_stt)
+        eform.addRow(self.whisper)
+        eform.addRow(self.cleanup)
+        eform.addRow("KI-Anbieter:", self.provider)
+        eform.addRow("OpenAI-Modell (Bereinigung):", self.openai_cleanup)
+
+        keys = QWidget()
+        keys_layout = QVBoxLayout(keys)
+        keys_layout.addWidget(_muted(QLabel("Die Schlüssel stehen nur in der Datei .env, nie im Repo.")))
         keys_layout.addWidget(self.key_status)
         key_buttons = QHBoxLayout()
         key_buttons.addWidget(open_env)
         key_buttons.addWidget(reload_env)
         key_buttons.addStretch(1)
         keys_layout.addLayout(key_buttons)
+        keys_layout.addStretch(1)
 
-        meeting = QGroupBox("Meetings")
-        mform = QFormLayout(meeting)
-        mform.addRow(self.sys_audio)
-        mform.addRow("Stücklänge:", self.chunk)
-
-        privat = QGroupBox("Verlauf und System")
+        privat = QWidget()
         pform = QFormLayout(privat)
         pform.addRow(self.history_on)
         pform.addRow("Aufbewahren:", self.keep_days)
@@ -392,28 +599,49 @@ class SettingsTab(QWidget):
         pform.addRow(self.desktop_shortcut)
         pform.addRow(self.start_menu_shortcut)
 
+        meeting = QWidget()
+        mform = QFormLayout(meeting)
+        mform.addRow(self.sys_audio)
+        mform.addRow("Stücklänge:", self.chunk)
+
+        pages = [("Allgemein", allgemein), ("Erkennung & KI", erkennung), ("Schlüssel", keys),
+                 ("Datenschutz & System", privat), ("Meetings", meeting), ("Info", self.info)]
+        self.nav = QListWidget()
+        self.nav.setFixedWidth(190)
+        self.stack = QStackedWidget()
+        for title, page in pages:
+            self.nav.addItem(title)
+            holder = QWidget()
+            holder_layout = QVBoxLayout(holder)
+            holder_layout.setContentsMargins(18, 4, 4, 4)
+            holder_layout.addWidget(_named(QLabel(title), "h2"))
+            holder_layout.addSpacing(6)
+            holder_layout.addWidget(page)
+            holder_layout.addStretch(1)
+            self.stack.addWidget(holder)
+        self.nav.currentRowChanged.connect(self.stack.setCurrentIndex)
+        self.nav.setCurrentRow(0)
+
         self.sounds.toggled.connect(self.sound_volume.setEnabled)
         self.save_btn = QPushButton("Speichern")
+        self.save_btn.setProperty("primary", True)
         self.save_btn.clicked.connect(lambda: self.save(restart=False))
         self.restart_btn = QPushButton("Speichern und neu starten")
         self.restart_btn.clicked.connect(lambda: self.save(restart=True))
         self.message = _muted(QLabel(
             "Das lokale Modell wirkt erst nach einem Neustart, alles andere sofort. Esc bricht eine laufende Aufnahme ab."
         ))
-        self.message.setWordWrap(True)
         bottom = QHBoxLayout()
         bottom.addWidget(self.save_btn)
         bottom.addWidget(self.restart_btn)
-        bottom.addStretch(1)
+        bottom.addWidget(self.message, 1)
 
+        body = QHBoxLayout()
+        body.addWidget(self.nav)
+        body.addWidget(self.stack, 1)
         layout = QVBoxLayout(self)
-        layout.addWidget(diktat)
-        layout.addWidget(keys_box)
-        layout.addWidget(meeting)
-        layout.addWidget(privat)
+        layout.addLayout(body, 1)
         layout.addLayout(bottom)
-        layout.addWidget(self.message)
-        layout.addStretch(1)
         self.load()
 
     def load(self) -> None:
@@ -439,6 +667,7 @@ class SettingsTab(QWidget):
         self.sound_volume.setValue(s.feedback.sound_volume)
         self.sound_volume.setEnabled(s.feedback.sounds)
         self.flow_bar.setChecked(s.ui.flow_bar)
+        _select(self.theme, s.ui.theme)
         self.sys_audio.setChecked(s.meeting.include_system_audio)
         self.chunk.setValue(int(s.meeting.chunk_minutes))
         self.history_on.setChecked(s.history.enabled)
@@ -484,7 +713,7 @@ class SettingsTab(QWidget):
             "meeting": {"include_system_audio": self.sys_audio.isChecked(), "chunk_minutes": self.chunk.value()},
             "history": {"enabled": self.history_on.isChecked(), "keep_days": self.keep_days.value()},
             "feedback": {"sounds": self.sounds.isChecked(), "sound_volume": self.sound_volume.value()},
-            "ui": {"flow_bar": self.flow_bar.isChecked()},
+            "ui": {"flow_bar": self.flow_bar.isChecked(), "theme": self.theme.currentData()},
         }
 
     def save(self, restart: bool = False, path=DEFAULT_PATH) -> bool:
@@ -507,87 +736,210 @@ class SettingsTab(QWidget):
         return True
 
 
-# ======================================================================================
-# Reiter 4: Info
-# ======================================================================================
+class SettingsDialog(QDialog):
+    """Rahmen um den SettingsTab: ein eigenes Fenster wie in Wispr Flow."""
 
-class InfoTab(QWidget):
-    def __init__(self, app) -> None:
-        super().__init__()
-        self.app = app
-        title = QLabel(f"Dictum {__version__}")
-        font = QFont()
-        font.setPointSize(16)
-        font.setBold(True)
-        title.setFont(font)
-
-        paths = QLabel(
-            f"Einstellungen: {DEFAULT_PATH}<br>Logdatei: {LOG_PATH}<br>Verlauf: {DB_PATH}<br>"
-            f"Schlüssel (.env): {REPO_ROOT / '.env'}"
-        )
-        paths.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        _muted(paths)
-
-        def button(text: str, action) -> QPushButton:
-            b = QPushButton(text)
-            b.clicked.connect(action)
-            return b
-
-        row1 = QHBoxLayout()
-        row1.addWidget(button("Logdatei öffnen", app.open_log))
-        row1.addWidget(button("Programmordner öffnen", lambda: os.startfile(DESKTOP_DIR)))
-        row1.addStretch(1)
-        row2 = QHBoxLayout()
-        row2.addWidget(button("Wörterbuch bearbeiten", app.open_dictionary))
-        row2.addWidget(button("Snippets bearbeiten", app.open_snippets))
-        row2.addWidget(button("Mit Cloud abgleichen", app.meetings.sync_now))
-        row2.addStretch(1)
-
+    def __init__(self, parent: QWidget, tab: SettingsTab) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Einstellungen")
+        self.setMinimumSize(820, 560)
+        self.resize(900, 640)
         layout = QVBoxLayout(self)
-        layout.addWidget(title)
-        layout.addWidget(_muted(QLabel("Diktieren, Gespräche aufnehmen und zusammenfassen.")))
-        layout.addSpacing(12)
-        layout.addLayout(row1)
-        layout.addLayout(row2)
-        layout.addSpacing(12)
-        layout.addWidget(paths)
-        layout.addStretch(1)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.addWidget(tab)
+        self.tab = tab
 
 
 # ======================================================================================
 # Hauptfenster
 # ======================================================================================
 
+class _Page:
+    """Eintrag der Seitenleiste: Schlüssel, Beschriftung, Symbol, Überschrift, Inhalt."""
+
+    def __init__(self, key: str, label: str, icon: str, title: str, widget: QWidget) -> None:
+        self.key, self.label, self.icon, self.title, self.widget = key, label, icon, title, widget
+
+
 class MainWindow(QMainWindow):
-    def __init__(self, app) -> None:
+    def __init__(self, app, settings_path=DEFAULT_PATH) -> None:
         super().__init__()
         self.app = app
+        self.settings_path = settings_path
         self._hinted = False
         self.setWindowTitle("Dictum")
         self.setWindowIcon(mic_icon())
-        self.resize(680, 640)
+        self.resize(1120, 780)
+        self.setMinimumSize(900, 620)
 
-        self.start_tab = StartTab(app)
-        self.history_tab = HistoryTab(app)
+        self.home_tab = HomeTab(app, on_styles=lambda: self.goto("styles"))
+        self.history_tab = self.home_tab.history
+        self.meetings_tab = MeetingsTab(app)
         self.stats_tab = StatsTab(app)
+        self.dictionary_tab = DictionaryTab(app, parts="words")
+        self.snippets_tab = DictionaryTab(app, parts="snippets")
         self.styles_tab = StylesTab(app)
-        self.dictionary_tab = DictionaryTab(app)
+        self.notepad_tab = NotepadTab(app)
         self.settings_tab = SettingsTab(app)
-        self.info_tab = InfoTab(app)
-        self.tabs = QTabWidget()
-        self.tabs.addTab(self.start_tab, "Start")
-        self.tabs.addTab(self.history_tab, "Verlauf")
-        self.tabs.addTab(self.stats_tab, "Statistik")
-        self.tabs.addTab(self.styles_tab, "Stile")
-        self.tabs.addTab(self.dictionary_tab, "Wörterbuch")
-        self.tabs.addTab(self.settings_tab, "Einstellungen")
-        self.tabs.addTab(self.info_tab, "Info")
-        self.tabs.currentChanged.connect(self._on_tab_changed)
-        self.setCentralWidget(self.tabs)
+        self.info_tab = self.settings_tab.info
+        self.settings_dialog = SettingsDialog(self, self.settings_tab)
+
+        self._pages = [
+            _Page("home", "Diktat", "mic", "Willkommen zurück", self.home_tab),
+            _Page("meetings", "Meetings", "meetings", "Meetings", self.meetings_tab),
+            _Page("stats", "Statistik", "stats", "Statistik", self.stats_tab),
+            _Page("words", "Wörterbuch", "dictionary", "Wörterbuch", self.dictionary_tab),
+            _Page("snippets", "Textbausteine", "snippets", "Textbausteine", self.snippets_tab),
+            _Page("styles", "Stile", "style", "Stile", self.styles_tab),
+            _Page("notepad", "Notizblock", "notepad", "Notizblock", self.notepad_tab),
+        ]
+        self._build()
 
         self._timer = QTimer(self)
         self._timer.setInterval(1000)
         self._timer.timeout.connect(self._tick)
+
+    # --- Aufbau -----------------------------------------------------------------------
+
+    def _build(self) -> None:
+        root = QWidget()
+        root.setObjectName("root")
+        self.setCentralWidget(root)
+        outer = QHBoxLayout(root)
+        outer.setContentsMargins(14, 12, 14, 14)
+        outer.setSpacing(12)
+
+        # Seitenleiste
+        sidebar = QFrame()
+        sidebar.setObjectName("sidebar")
+        sidebar.setFixedWidth(220)
+        side = QVBoxLayout(sidebar)
+        side.setContentsMargins(4, 6, 4, 4)
+        side.setSpacing(2)
+        brand = QHBoxLayout()
+        logo = QLabel()
+        logo.setPixmap(mic_icon().pixmap(28, 28))
+        brand.addWidget(logo)
+        brand.addWidget(_named(QLabel("Dictum"), "brand"))
+        brand.addStretch(1)
+        side.addLayout(brand)
+        side.addSpacing(18)
+
+        self._nav_group = QButtonGroup(self)
+        self._nav_group.setExclusive(True)
+        self._nav_buttons: dict[str, QPushButton] = {}
+        for page in self._pages:
+            button = QPushButton("  " + page.label)
+            button.setObjectName("nav")
+            button.setCheckable(True)
+            button.setIconSize(QSize(20, 20))
+            button.clicked.connect(lambda _checked=False, key=page.key: self.goto(key))
+            self._nav_group.addButton(button)
+            self._nav_buttons[page.key] = button
+            side.addWidget(button)
+        side.addStretch(1)
+        self.settings_btn = QPushButton("  Einstellungen")
+        self.settings_btn.setObjectName("nav")
+        self.settings_btn.setIconSize(QSize(20, 20))
+        self.settings_btn.clicked.connect(self.open_settings)
+        side.addWidget(self.settings_btn)
+        outer.addWidget(sidebar)
+
+        # Rechts: Kopfzeile mit Umschalter, darunter die Karte mit der Seite
+        right = QVBoxLayout()
+        right.setSpacing(8)
+        header = QHBoxLayout()
+        header.addStretch(1)
+        self.theme_btn = QPushButton()
+        self.theme_btn.setObjectName("iconbtn")
+        self.theme_btn.setIconSize(QSize(20, 20))
+        self.theme_btn.setToolTip("Hell/Dunkel umschalten")
+        self.theme_btn.clicked.connect(self.toggle_theme)
+        header.addWidget(self.theme_btn)
+        right.addLayout(header)
+
+        card = QFrame()
+        card.setObjectName("card")
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(32, 26, 32, 22)
+        self.title = _named(QLabel(), "h1")
+        card_layout.addWidget(self.title)
+        card_layout.addSpacing(10)
+        self.stack = QStackedWidget()
+        for page in self._pages:
+            scroll = QScrollArea()
+            scroll.setWidgetResizable(True)
+            scroll.setFrameShape(QFrame.Shape.NoFrame)
+            scroll.setWidget(page.widget)
+            self.stack.addWidget(scroll)
+        card_layout.addWidget(self.stack, 1)
+        right.addWidget(card, 1)
+        outer.addLayout(right, 1)
+
+        self._refresh_icons()
+        self.goto("home")
+
+    def _refresh_icons(self) -> None:
+        """Symbole in der Textfarbe des aktuellen Modus (beim Umschalten neu malen)."""
+        kind = QApplication.instance().property("dictum_theme") or "light"
+        muted, text = theme.color(kind, "muted"), theme.color(kind, "text")
+        for page in self._pages:
+            self._nav_buttons[page.key].setIcon(nav_icon(page.icon, text))
+        self.settings_btn.setIcon(nav_icon("settings", text))
+        self.theme_btn.setIcon(nav_icon("sun" if kind == "dark" else "moon", muted))
+
+    # --- Navigation -------------------------------------------------------------------
+
+    def goto(self, key: str) -> None:
+        for index, page in enumerate(self._pages):
+            if page.key == key:
+                self._nav_buttons[key].setChecked(True)
+                self.stack.setCurrentIndex(index)
+                self.title.setText(page.title)
+                self._on_page_shown(key)
+                return
+
+    def current_key(self) -> str:
+        return self._pages[self.stack.currentIndex()].key
+
+    def _on_page_shown(self, key: str) -> None:
+        """Beim Öffnen einer Seite frisch einlesen: Im Tray oder an den Dateien kann sich etwas geändert haben."""
+        if key == "home":
+            self.home_tab.refresh(force=True)
+        elif key == "stats":
+            self.stats_tab.refresh()
+        elif key == "styles":
+            self.styles_tab.load()
+        elif key == "words":
+            self.dictionary_tab.reload()
+        elif key == "snippets":
+            self.snippets_tab.reload()
+        elif key == "meetings":
+            self.meetings_tab.refresh()
+
+    def open_settings(self) -> None:
+        self.settings_tab.load()
+        self.settings_dialog.show()
+        self.settings_dialog.raise_()
+        self.settings_dialog.activateWindow()
+
+    # --- Hell/Dunkel ------------------------------------------------------------------
+
+    def toggle_theme(self) -> None:
+        current = QApplication.instance().property("dictum_theme") or "light"
+        self.set_theme("light" if current == "dark" else "dark")
+
+    def set_theme(self, mode: str) -> None:
+        try:
+            new = save_settings({"ui": {"theme": mode}}, self.settings_path)
+        except ValueError:
+            return
+        theme.apply(QApplication.instance(), mode)
+        self.app.apply_settings(new)
+        self._refresh_icons()
+        self.stats_tab.chart.update()
+
+    # --- Zeitgeber --------------------------------------------------------------------
 
     def show_and_raise(self) -> None:
         self.show()
@@ -596,24 +948,13 @@ class MainWindow(QMainWindow):
         self.activateWindow()
 
     def _tick(self) -> None:
-        self.start_tab.refresh()
-        if self.tabs.currentWidget() is self.history_tab:
-            self.history_tab.refresh()
-        elif self.tabs.currentWidget() is self.stats_tab:
+        key = self.current_key()
+        if key == "home":
+            self.home_tab.refresh()
+        elif key == "meetings":
+            self.meetings_tab.refresh()
+        elif key == "stats":
             self.stats_tab.refresh()
-
-    def _on_tab_changed(self, _index: int) -> None:
-        widget = self.tabs.currentWidget()
-        if widget is self.settings_tab:
-            self.settings_tab.load()  # frisch einlesen: im Tray kann sich etwas geändert haben
-        elif widget is self.history_tab:
-            self.history_tab.refresh(force=True)
-        elif widget is self.styles_tab:
-            self.styles_tab.load()
-        elif widget is self.stats_tab:
-            self.stats_tab.refresh()
-        elif widget is self.dictionary_tab:
-            self.dictionary_tab.reload()  # Dateien können von Hand oder per Abgleich geändert worden sein
 
     def showEvent(self, event) -> None:  # noqa: N802 (Qt-Name)
         self._timer.start()
@@ -627,6 +968,7 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event) -> None:  # noqa: N802
         """Das X schließt nur das Fenster, Dictum läuft im Infobereich weiter."""
         event.ignore()
+        self.notepad_tab.save()
         self.hide()
         if not self._hinted:
             self._hinted = True

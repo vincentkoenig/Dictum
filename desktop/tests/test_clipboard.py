@@ -18,7 +18,7 @@ def real_clipboard():
 
 
 def put_formats():
-    win32clipboard.OpenClipboard()
+    clipboard._open()
     try:
         win32clipboard.EmptyClipboard()
         win32clipboard.SetClipboardData(win32con.CF_UNICODETEXT, "Hallo Welt")
@@ -37,7 +37,7 @@ def test_alle_formate_ueberleben_einfuegen(real_clipboard):
 
     clipboard.restore(saved)
     assert clipboard.get_text() == "Hallo Welt"
-    win32clipboard.OpenClipboard()
+    clipboard._open()
     try:
         assert win32clipboard.GetClipboardData(HTML) == b"<b>Hallo</b> Welt"   # auch der formatierte Teil
     finally:
@@ -47,7 +47,7 @@ def test_alle_formate_ueberleben_einfuegen(real_clipboard):
 def test_dateien_werden_wiederhergestellt(real_clipboard, tmp_path):
     f = tmp_path / "datei.txt"
     f.write_text("x")
-    win32clipboard.OpenClipboard()
+    clipboard._open()
     try:
         win32clipboard.EmptyClipboard()
         win32clipboard.SetClipboardData(win32con.CF_HDROP, clipboard._drop_files((str(f),)))
@@ -58,7 +58,7 @@ def test_dateien_werden_wiederhergestellt(real_clipboard, tmp_path):
 
     clipboard.set_text("anderer Text")
     clipboard.restore(saved)
-    win32clipboard.OpenClipboard()
+    clipboard._open()
     try:
         assert win32clipboard.GetClipboardData(win32con.CF_HDROP) == (str(f),)
     finally:
@@ -67,7 +67,7 @@ def test_dateien_werden_wiederhergestellt(real_clipboard, tmp_path):
 
 def test_diktat_taucht_nicht_im_verlauf_auf(real_clipboard):
     clipboard.set_text("geheim")
-    win32clipboard.OpenClipboard()
+    clipboard._open()
     try:
         fmt = win32clipboard.RegisterClipboardFormat("CanIncludeInClipboardHistory")
         assert win32clipboard.IsClipboardFormatAvailable(fmt)
@@ -77,7 +77,7 @@ def test_diktat_taucht_nicht_im_verlauf_auf(real_clipboard):
 
 
 def test_leere_zwischenablage(real_clipboard):
-    win32clipboard.OpenClipboard()
+    clipboard._open()
     try:
         win32clipboard.EmptyClipboard()
     finally:

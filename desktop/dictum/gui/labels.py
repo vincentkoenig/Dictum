@@ -36,4 +36,9 @@ OPENAI_CLEANUP_MODELS = {
     "gpt-5-nano": "gpt-5-nano (am billigsten)",
     "gpt-5-mini": "gpt-5-mini (genauer)",
 }
+THEME_LABELS = {
+    "system": "Wie Windows",
+    "light": "Hell",
+    "dark": "Dunkel",
+}
 MODEL_CHOICES = ["tiny", "base", "small", "medium", "large-v3-turbo"]

@@ -37,6 +37,7 @@ import pyperclip
 from PySide6.QtCore import QObject, QTimer, Signal
 from PySide6.QtWidgets import QApplication
 
+from .gui import theme
 from . import autostart, commands, context, costs, learn, levels, shortcuts, sounds, styles
 from .audio import Recorder, duration_seconds
 from .cleanup import clean_text
@@ -85,6 +86,7 @@ class DictumApp:
         self.qt.setQuitOnLastWindowClosed(False)
         self.qt.setApplicationName("Dictum")
         self.qt.setWindowIcon(mic_icon())
+        theme.apply(self.qt, settings.ui.theme)  # vor dem ersten Fenster: Farben, Rundungen, Schrift
 
         tr = settings.transcription
         self.recorder = Recorder()
@@ -242,6 +244,8 @@ class DictumApp:
         self.hotkey_text = hotkey_label(new.hotkey.keys)
         self.overlay.set_hint(self._bar_hint())
         self.overlay.set_flow_bar(new.ui.flow_bar)
+        if new.ui.theme != old.ui.theme:
+            theme.apply(self.qt, new.ui.theme)
         self.tray.set_hotkey_label(self.hotkey_text)
         self.machine.mode = self.command_machine.mode = new.hotkey.mode
         self.machine.hold_threshold = self.command_machine.hold_threshold = new.hotkey.hold_threshold

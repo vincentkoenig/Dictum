@@ -38,3 +38,79 @@ def mic_pixmap(size: int = 64, recording: bool = False) -> QPixmap:
 
 def mic_icon(recording: bool = False) -> QIcon:
     return QIcon(mic_pixmap(64, recording))
+
+
+# --- Symbole für die Seitenleiste (einfache Linien, mit Qt gezeichnet) ---------------------
+
+def nav_icon(name: str, color: str, size: int = 20) -> QIcon:
+    """Schlichtes Linien-Symbol in der angegebenen Farbe. Selbst gemalt statt aus einer Symbolschrift,
+    damit es auf jedem Windows gleich aussieht."""
+    from PySide6.QtGui import QFont, QPainterPath
+
+    pm = QPixmap(size * 2, size * 2)          # doppelt so groß gemalt: scharf auf hochauflösenden Displays
+    pm.setDevicePixelRatio(2)
+    pm.fill(Qt.GlobalColor.transparent)
+    p = QPainter(pm)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    s = size / 20
+    pen = QPen(QColor(color), 1.6 * s, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+    p.setPen(pen)
+    p.setBrush(Qt.BrushStyle.NoBrush)
+
+    def r(x, y, w, h):
+        return QRectF(x * s, y * s, w * s, h * s)
+
+    def pt(x, y):
+        return QPointF(x * s, y * s)
+
+    if name == "mic":
+        p.drawRoundedRect(r(7, 2, 6, 10), 3 * s, 3 * s)
+        p.drawArc(r(4, 6, 12, 9), 180 * 16, 180 * 16)
+        p.drawLine(pt(10, 15), pt(10, 18))
+    elif name == "meetings":
+        p.drawEllipse(r(7, 3, 6, 6))
+        p.drawArc(r(3, 11, 14, 12), 0, 180 * 16)
+    elif name == "stats":
+        for x, h in ((4, 6), (9, 11), (14, 8)):
+            p.drawLine(pt(x, 17), pt(x, 17 - h))
+    elif name == "dictionary":
+        p.drawRoundedRect(r(4, 2.5, 12, 15), 2 * s, 2 * s)
+        p.drawLine(pt(7, 7), pt(13, 7))
+        p.drawLine(pt(7, 10.5), pt(13, 10.5))
+    elif name == "snippets":
+        p.drawEllipse(r(3.5, 12, 4, 4))
+        p.drawEllipse(r(12.5, 12, 4, 4))
+        p.drawLine(pt(6, 12.4), pt(14, 3))
+        p.drawLine(pt(14, 12.4), pt(6, 3))
+    elif name == "style":
+        font = QFont("Georgia", int(11 * s))
+        font.setBold(True)
+        p.setFont(font)
+        p.drawText(r(0, 0, 20, 20), Qt.AlignmentFlag.AlignCenter, "Aa")
+    elif name == "notepad":
+        p.drawRoundedRect(r(4, 3, 12, 14), 2 * s, 2 * s)
+        p.drawLine(pt(7, 8), pt(13, 8))
+        p.drawLine(pt(7, 11), pt(13, 11))
+        p.drawLine(pt(7, 14), pt(10.5, 14))
+    elif name == "settings":
+        for y, knob in ((5, 7), (10, 13), (15, 6)):          # Regler mit Knopf
+            p.drawLine(pt(3.5, y), pt(16.5, y))
+            p.setBrush(pen.color())
+            p.drawEllipse(pt(knob, y), 1.8 * s, 1.8 * s)
+            p.setBrush(Qt.BrushStyle.NoBrush)
+    elif name == "moon":
+        path = QPainterPath()
+        path.addEllipse(r(4, 4, 12, 12))
+        cut = QPainterPath()
+        cut.addEllipse(r(8, 2.5, 11, 11))
+        p.drawPath(path.subtracted(cut))
+    elif name == "sun":
+        p.drawEllipse(r(6.5, 6.5, 7, 7))
+        import math
+
+        for i in range(8):
+            a = i * math.pi / 4
+            p.drawLine(pt(10 + 5.5 * math.cos(a), 10 + 5.5 * math.sin(a)),
+                       pt(10 + 7.8 * math.cos(a), 10 + 7.8 * math.sin(a)))
+    p.end()
+    return QIcon(pm)

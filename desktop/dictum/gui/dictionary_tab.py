@@ -45,9 +45,10 @@ def _muted(label: QLabel) -> QLabel:
 
 class DictionaryTab(QWidget):
     def __init__(self, app, dictionary_path: Path = DICTIONARY_PATH, snippets_path: Path = SNIPPETS_PATH,
-                 settings_path: Path = DEFAULT_PATH) -> None:
+                 settings_path: Path = DEFAULT_PATH, parts: str = "both") -> None:
         super().__init__()
         self.app = app
+        self.parts = parts  # "words", "snippets" oder "both": Die Seitenleiste zeigt beide getrennt
         self.settings_path = settings_path
         self.dictionary_path = dictionary_path
         self.snippets_path = snippets_path
@@ -114,8 +115,12 @@ class DictionaryTab(QWidget):
 
         self.message = _muted(QLabel(""))
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(words_box, 1)
         layout.addWidget(snippet_box, 1)
+        # Beide Teile bleiben bestehen (die Methoden greifen auf beide zu), nur einer wird gezeigt
+        words_box.setVisible(parts in ("words", "both"))
+        snippet_box.setVisible(parts in ("snippets", "both"))
         layout.addWidget(self.message)
         self.reload()
 

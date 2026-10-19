@@ -208,26 +208,104 @@ def test_tray_benachrichtigung_mit_klick(app, qapp):
 
 def test_startseite_zeigt_bereit_laden_und_meeting(app, qapp):
     window = MainWindow(app)
-    start = window.start_tab
-    assert start.status.text() == "Bereit – Strg rechts halten und sprechen"
+    home = window.home_tab
+    assert home.status.text() == "Bereit – Strg rechts halten und sprechen"
     app.local.is_ready = False
-    start.refresh()
-    assert "Modell wird geladen" in start.status.text()
+    home.refresh()
+    assert "Modell wird geladen" in home.status.text()
     app.local.is_ready = True
     app.meetings.is_recording, app.meetings.elapsed = True, 61
-    start.refresh()
-    assert start.status.text() == "● Meeting läuft – 01:01"
-    assert start.meeting_btn.text() == "⏹ Meeting beenden"
+    home.refresh()
+    assert home.status.text() == "● Meeting läuft – 01:01"
+    meetings = window.meetings_tab
+    meetings.refresh()
+    assert meetings.meeting_btn.text() == "⏹ Meeting beenden" and "01:01" in meetings.status.text()
 
 
 def test_meeting_knopf_startet_mit_gewaehlter_vorlage_und_beendet(app, qapp):
     window = MainWindow(app)
-    start = window.start_tab
+    start = window.meetings_tab
     start.template.setCurrentIndex(start.template.findData("interview"))
     start.meeting_btn.click()
     assert app.meetings.calls == [("start", "interview")]
     start.meeting_btn.click()
     assert app.meetings.calls[-1] == ("stop",)
+
+
+def test_seitenleiste_wechselt_seiten_und_ueberschrift(app, qapp):
+    window = MainWindow(app)
+    assert window.current_key() == "home" and window.title.text() == "Willkommen zurück"
+    for key, title in (("stats", "Statistik"), ("words", "Wörterbuch"), ("snippets", "Textbausteine"),
+                       ("styles", "Stile"), ("notepad", "Notizblock"), ("meetings", "Meetings")):
+        window._nav_buttons[key].click()
+        assert window.current_key() == key and window.title.text() == title
+        assert window._nav_buttons[key].isChecked()
+
+
+def test_woerterbuch_und_bausteine_sind_getrennte_seiten(app, qapp):
+    window = MainWindow(app)
+    assert window.dictionary_tab.parts == "words" and window.snippets_tab.parts == "snippets"
+    window.show()
+    assert window.dictionary_tab.words.isVisibleTo(window.dictionary_tab)
+    assert not window.dictionary_tab.snippet_list.isVisibleTo(window.dictionary_tab)
+    assert window.snippets_tab.snippet_list.isVisibleTo(window.snippets_tab)
+    assert not window.snippets_tab.words.isVisibleTo(window.snippets_tab)
+    window.snippets_tab.reload()                      # darf auch mit versteckten Teilen nicht abstürzen
+    window.dictionary_tab.reload()
+
+
+def test_einstellungen_oeffnen_sich_als_dialog(app, qapp):
+    window = MainWindow(app)
+    window.open_settings()
+    assert window.settings_dialog.isVisible() and window.settings_dialog.tab is window.settings_tab
+    tab = window.settings_tab
+    assert [tab.nav.item(i).text() for i in range(tab.nav.count())] == [
+        "Allgemein", "Erkennung & KI", "Schlüssel", "Datenschutz & System", "Meetings", "Info"]
+    tab.nav.setCurrentRow(5)
+    assert tab.stack.currentIndex() == 5
+
+
+def test_hell_dunkel_umschalten_speichert_und_malt_um(app, qapp, tmp_path):
+    path = tmp_path / "settings.toml"
+    shutil.copy(DEFAULT_PATH, path)
+    window = MainWindow(app, settings_path=path)
+    window.set_theme("dark")
+    assert qapp.property("dictum_theme") == "dark" and load_settings(path).ui.theme == "dark"
+    assert "#1a1917" in qapp.styleSheet()
+    window.toggle_theme()
+    assert qapp.property("dictum_theme") == "light" and load_settings(path).ui.theme == "light"
+
+
+def test_notizblock_speichert_und_laedt(app, qapp, tmp_path):
+    from dictum.gui.window import NotepadTab
+
+    path = tmp_path / "notizblock.txt"
+    tab = NotepadTab(app, path)
+    tab.edit.setPlainText("Hallo Notiz")
+    tab.save()
+    assert path.read_text(encoding="utf-8") == "Hallo Notiz"
+    assert NotepadTab(app, path).edit.toPlainText() == "Hallo Notiz"
+
+
+def test_zeit_im_verlauf_ist_freundlich():
+    from datetime import date, datetime
+
+    from dictum.gui.window import friendly_time
+
+    today = date(2026, 10, 19)
+    assert friendly_time(datetime(2026, 10, 19, 11, 7), today) == "Heute 11:07"
+    assert friendly_time(datetime(2026, 10, 18, 17, 56), today) == "Gestern 17:56"
+    assert friendly_time(datetime(2026, 10, 15, 9, 5), today) == "15.10. 09:05"
+
+
+def test_theme_modi_und_farben(qapp):
+    from dictum.gui import theme
+
+    assert theme.effective("dark") == "dark" and theme.effective("light") == "light"
+    assert theme.effective("system") in ("light", "dark")
+    for kind in ("light", "dark"):
+        css = theme.stylesheet_for(kind)
+        assert "$" not in css and theme.COLORS[kind]["bg"] in css
 
 
 def test_verlauf_zeigt_sucht_und_kopiert(app, qapp):

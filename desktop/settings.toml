@@ -137,3 +137,5 @@ sound_volume = 20
 [ui]
 # Flow Bar: kleine Blase unten in der Bildschirmmitte. Maus darüber = größer, Klick = diktieren.
 flow_bar = true
+# Aussehen: "system" (wie Windows), "light" (hell) oder "dark" (dunkel). Auch oben rechts im Fenster umschaltbar.
+theme = "system"

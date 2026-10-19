@@ -95,10 +95,7 @@ class Card(QWidget):
     def __init__(self, caption: str) -> None:
         super().__init__()
         self.value = QLabel("–")
-        font = QFont()
-        font.setPointSize(18)
-        font.setBold(True)
-        self.value.setFont(font)
+        self.value.setObjectName("bignum")  # große Serifenzahl, siehe theme.py
         self.caption = QLabel(caption)
         self.caption.setStyleSheet("color: palette(placeholder-text);")
         self.caption.setWordWrap(True)
