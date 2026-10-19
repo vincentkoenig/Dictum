@@ -38,7 +38,7 @@ import pyperclip
 from PySide6.QtCore import QObject, QTimer, Signal
 from PySide6.QtWidgets import QApplication
 
-from . import autostart, commands, context, costs, levels, shortcuts, styles
+from . import autostart, commands, context, costs, learn, levels, shortcuts, styles
 from .audio import Recorder, duration_seconds
 from .cleanup import clean_text
 from .cloud_transcriber import OpenAITranscriber
@@ -57,6 +57,7 @@ from .transcriber import LocalTranscriber
 from .vocabulary import (
     DICTIONARY_PATH,
     SNIPPETS_PATH,
+    add_terms,
     ensure_user_files,
     load_dictionary,
     load_snippets,
@@ -253,7 +254,8 @@ class DictumApp:
         # … und das gemeinsame Einstellungs-Objekt aktualisieren, aus dem u. a. der
         # MeetingController bei jedem Meeting liest. Es ist dasselbe Objekt wie bisher,
         # deshalb sehen alle Beteiligten die neuen Werte sofort.
-        for section in ("hotkey", "transcription", "cleanup", "meeting", "history", "styles", "context", "feedback"):
+        for section in ("hotkey", "transcription", "cleanup", "meeting", "history", "dictionary", "styles",
+                        "context", "feedback"):
             setattr(old, section, getattr(new, section))
         log.info("Einstellungen übernommen (Neustart nötig für: %s)", ", ".join(needs_restart) or "nichts")
         return needs_restart
@@ -446,6 +448,7 @@ class DictumApp:
         self._last_text = text
         insert_text(text)
         self._remember(raw, text, audio, cleaned, snippet is not None, target)
+        self._learn_async(text, target)
 
     def _process_command(self, audio: np.ndarray, target: context.ActiveWindow | None) -> None:
         """Command Mode: Anweisung erkennen, markierten Text holen, KI anwenden, Ergebnis einfügen."""
@@ -466,6 +469,28 @@ class DictumApp:
         self._last_text = result
         insert_text(result)  # ersetzt die Markierung (oder landet an der Schreibstelle)
         self._remember(instruction, result, audio, True, False, target)
+
+    def _learn_async(self, text: str, target: context.ActiveWindow | None) -> None:
+        """Lern-Wörterbuch: ein paar Sekunden später prüfen, ob du ein Wort korrigiert hast."""
+        if self.settings.dictionary.auto_learn and target is not None:
+            threading.Thread(target=self._learn, args=(text, target), daemon=True).start()
+
+    def _learn(self, text: str, target: context.ActiveWindow) -> None:
+        try:
+            def same_window() -> bool:
+                now = context.active_window()
+                return now is not None and now.exe == target.exe
+
+            found = learn.learn_from_field(
+                text, lambda: context.field_text(5000), same_window,
+                load_dictionary(), self.settings.dictionary.learn_delay,
+            )
+            added = add_terms([new for _old, new in found])
+            if added:
+                log.info("Wörterbuch gelernt: %s", added)
+                self.tray.notify("Dictum hat dazugelernt", "Neu im Wörterbuch: " + ", ".join(added))
+        except Exception:
+            log.exception("Lern-Wörterbuch fehlgeschlagen")
 
     def _context_for(self, target: context.ActiveWindow | None) -> str:
         """Was die KI über die Umgebung erfahren darf (siehe [context] in settings.toml)."""

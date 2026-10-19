@@ -81,6 +81,12 @@ class HistorySettings:
 
 
 @dataclass
+class DictionarySettings:
+    auto_learn: bool = False    # Korrekturen im Textfeld erkennen und Wörter lernen (siehe learn.py)
+    learn_delay: float = 10.0   # Sekunden nach dem Einfügen, bevor das Feld erneut gelesen wird
+
+
+@dataclass
 class StylesSettings:
     """Stil pro Kategorie (Auswahl siehe styles.py). `apps` ordnet einzelnen Programmen einen Stil zu."""
 
@@ -112,6 +118,7 @@ class Settings:
     cloud: CloudSettings = field(default_factory=CloudSettings)
     meeting: MeetingSettings = field(default_factory=MeetingSettings)
     history: HistorySettings = field(default_factory=HistorySettings)
+    dictionary: DictionarySettings = field(default_factory=DictionarySettings)
     styles: StylesSettings = field(default_factory=StylesSettings)
     context: ContextSettings = field(default_factory=ContextSettings)
     feedback: FeedbackSettings = field(default_factory=FeedbackSettings)
@@ -131,6 +138,7 @@ def load_settings(path: Path = DEFAULT_PATH) -> Settings:
         cloud=CloudSettings(**data.get("cloud", {})),
         meeting=MeetingSettings(**data.get("meeting", {})),
         history=HistorySettings(**data.get("history", {})),
+        dictionary=DictionarySettings(**data.get("dictionary", {})),
         styles=StylesSettings(**data.get("styles", {})),
         context=ContextSettings(**data.get("context", {})),
         feedback=FeedbackSettings(**data.get("feedback", {})),
@@ -167,6 +175,8 @@ def _validate(settings: Settings) -> None:
     for exe, style in st.apps.items():
         if style not in STYLES:
             raise ValueError(f"Ungültiger Stil '{style}' für {exe}. Erlaubt: {set(STYLES)}")
+    if settings.dictionary.learn_delay < 1:
+        raise ValueError("dictionary.learn_delay muss mindestens 1 Sekunde sein.")
     if hk.max_minutes < 0:
         raise ValueError("hotkey.max_minutes darf nicht negativ sein (0 = unbegrenzt).")
     if hk.hold_threshold <= 0:

@@ -124,6 +124,16 @@ def save_dictionary(terms: list[str], path: Path = DICTIONARY_PATH) -> list[str]
     return clean
 
 
+def add_terms(terms: list[str], path: Path = DICTIONARY_PATH) -> list[str]:
+    """Fügt Wörter hinzu, die noch fehlen. Gibt zurück, welche wirklich neu waren."""
+    current = load_dictionary(path)
+    have = {t.casefold() for t in current}
+    new = [t for t in dict.fromkeys(terms) if t.casefold() not in have]
+    if new:
+        save_dictionary(current + new, path)
+    return new
+
+
 def save_snippets(snippets: list[Snippet], path: Path = SNIPPETS_PATH) -> None:
     import tomlkit
 

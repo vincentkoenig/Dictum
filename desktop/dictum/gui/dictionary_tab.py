@@ -11,6 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtWidgets import (
+    QCheckBox,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -23,6 +24,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..config import DEFAULT_PATH
+from ..settings_io import save_settings
 from ..vocabulary import (
     DICTIONARY_PATH,
     SNIPPETS_PATH,
@@ -41,9 +44,11 @@ def _muted(label: QLabel) -> QLabel:
 
 
 class DictionaryTab(QWidget):
-    def __init__(self, app, dictionary_path: Path = DICTIONARY_PATH, snippets_path: Path = SNIPPETS_PATH) -> None:
+    def __init__(self, app, dictionary_path: Path = DICTIONARY_PATH, snippets_path: Path = SNIPPETS_PATH,
+                 settings_path: Path = DEFAULT_PATH) -> None:
         super().__init__()
         self.app = app
+        self.settings_path = settings_path
         self.dictionary_path = dictionary_path
         self.snippets_path = snippets_path
         self._snippets: list[Snippet] = []
@@ -70,6 +75,14 @@ class DictionaryTab(QWidget):
         )))
         words_layout.addWidget(self.words, 1)
         words_layout.addLayout(row)
+        self.auto_learn = QCheckBox("Automatisch aus meinen Korrekturen lernen")
+        self.auto_learn.setChecked(app.settings.dictionary.auto_learn)
+        self.auto_learn.toggled.connect(self._toggle_learning)
+        words_layout.addWidget(self.auto_learn)
+        words_layout.addWidget(_muted(QLabel(
+            "Korrigierst du ein diktiertes Wort im Textfeld, nimmt Dictum die richtige Schreibweise ins Wörterbuch "
+            "auf. Dafür liest es einige Sekunden nach dem Einfügen den Text im Feld (nur lokal, nie Passwortfelder)."
+        )))
 
         # --- Snippets ---
         self.snippet_list = QListWidget()
@@ -112,6 +125,9 @@ class DictionaryTab(QWidget):
         """Liest beide Dateien neu ein (auch wenn sie von Hand oder per Handy-Abgleich geändert wurden)."""
         self.words.clear()
         self.words.addItems(load_dictionary(self.dictionary_path))
+        self.auto_learn.blockSignals(True)
+        self.auto_learn.setChecked(self.app.settings.dictionary.auto_learn)
+        self.auto_learn.blockSignals(False)
         self._snippets = load_snippets(self.snippets_path)
         self._fill_snippets()
 
@@ -128,6 +144,14 @@ class DictionaryTab(QWidget):
         else:
             self.snippet_list.setCurrentRow(-1)
             self._show_snippet(-1)
+
+    def _toggle_learning(self, enabled: bool) -> None:
+        try:
+            self.app.apply_settings(save_settings({"dictionary": {"auto_learn": enabled}}, self.settings_path))
+        except ValueError as error:
+            self.message.setText(f"Nicht gespeichert: {error}")
+            return
+        self.message.setText("Lernen ist " + ("an." if enabled else "aus."))
 
     # --- Wörter ------------------------------------------------------------------------
 

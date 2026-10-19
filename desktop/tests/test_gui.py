@@ -104,6 +104,7 @@ class FakeApp:
     def apply_settings(self, new):
         self.applied.append(new)
         self.settings.styles, self.settings.context = new.styles, new.context
+        self.settings.dictionary = new.dictionary
         return ["das lokale Modell"] if new.transcription.model != self.settings.transcription.model else []
 
     def set_hotkeys_enabled(self, enabled):
@@ -485,3 +486,16 @@ def test_stile_tab_kontext_haken(app, qapp, tmp_path):
     assert tab.window_title.isChecked() and not tab.field_text.isChecked()
     tab.field_text.setChecked(True)
     assert load_settings(path).context.field_text is True
+
+
+def test_lernen_ein_und_ausschalten(app, qapp, tmp_path):
+    from dictum.gui.dictionary_tab import DictionaryTab
+
+    path = tmp_path / "settings.toml"
+    shutil.copy(DEFAULT_PATH, path)
+    tab = DictionaryTab(app, tmp_path / "d.txt", tmp_path / "s.toml", path)
+    assert not tab.auto_learn.isChecked()
+    tab.auto_learn.setChecked(True)
+    assert load_settings(path).dictionary.auto_learn is True and "an" in tab.message.text()
+    tab.auto_learn.setChecked(False)
+    assert load_settings(path).dictionary.auto_learn is False

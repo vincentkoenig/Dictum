@@ -65,6 +65,7 @@ egal ob Word, Browser, Outlook oder Slack. Dieses Dokument erklärt, wie das fun
 | `gui/styles_tab.py` | Reiter Stile | Stil je Kategorie, eigene Zuordnung, Kontext-Haken |
 | `commands.py` | Command Mode | Anweisung + markierter Text → KI → Ergebnis |
 | `levels.py` | Flüstermodus | leise Aufnahmen auf Sprechpegel anheben |
+| `learn.py` | Lern-Wörterbuch | Korrekturen im Textfeld erkennen (difflib) |
 | `history.py` | Lokaler Verlauf | SQLite-Datei, nur auf diesem PC |
 | `settings_io.py` | Einstellungen speichern | tomlkit erhält die Kommentare |
 | `app.py` | Verbindet alles | Threads, Signale, Warteschlange |
@@ -528,6 +529,33 @@ Das **Programm** merkt sich `context.active_window()` beim Start der Aufnahme: V
 Prozess → Name. Programme mit Administratorrechten verweigern den Namen, dann bleibt er leer. Der Name
 steht nur im lokalen Verlauf. Ältere Datenbanken bekommen die neuen Spalten `app` und `cost` beim Öffnen
 nachgerüstet (`MIGRATIONS`), alte Einträge haben dann kein Programm.
+
+### Lern-Wörterbuch (`learn.py`)
+
+Du diktierst „Wir nutzen super Base“, Whisper schreibt es so, du machst im Textfeld „Supabase“ daraus.
+Dictum nimmt das Wort selbst ins Wörterbuch auf; beim nächsten Mal stimmt es sofort. So funktioniert es:
+
+1. Nach dem Einfügen merkt sich Dictum Text und Programm.
+2. Nach `learn_delay` Sekunden (Standard 10) liest es das Eingabefeld erneut (`context.field_text`) und
+   vergleicht **Wort für Wort** mit dem Eingefügten (`difflib.SequenceMatcher`).
+3. Gelernt wird nur, was sicher eine **Korrektur** ist:
+   - ein bis drei Wörter wurden durch ein bis drei andere ersetzt (auch zusammen-/auseinandergeschrieben),
+   - links oder rechts davon steht der Text unverändert (zwei Wörter reichen als Anker; so ist es unsere Stelle),
+   - alt und neu sehen sich ähnlich (Ähnlichkeit ≥ 0,5, ohne Leerzeichen gerechnet): „Mueller → Müller“ ja,
+     „Mueller → Frau“ nein,
+   - das neue Wort steht noch nicht im Wörterbuch, und nur Groß-/Kleinschreibung zählt nicht,
+   - höchstens drei neue Wörter pro Diktat.
+   Ein umformulierter Satz erzeugt deshalb keine Einträge.
+4. Neue Wörter landen in `dictionary.txt`, und eine Meldung sagt, welche. Falsche Einträge löscht man im Reiter
+   *Wörterbuch*.
+
+**Datenschutz:** Weil dafür der Text im Eingabefeld gelesen wird, ist das Lernen **aus**, bis man es im Reiter
+*Wörterbuch* einschaltet. Es bleibt lokal, nur das gelernte Wort wird gespeichert, Passwortfelder werden nie
+gelesen, und wer inzwischen in ein anderes Programm gewechselt ist, wird nicht ausgelesen.
+
+**Grenze:** Das Lesen hängt an UI Automation. Programme, die ihr Textfeld nicht preisgeben (manche Spiele,
+einige Electron-Apps), liefern nichts, dann lernt Dictum dort nichts. Das Ergebnis der Tests betrifft die
+Vergleichslogik, nicht jede einzelne Anwendung.
 
 ### Flüstermodus und Freihand (`levels.py`)
 

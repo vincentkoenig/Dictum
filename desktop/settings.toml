@@ -104,6 +104,13 @@ enabled = true
 # Einträge, die älter sind, werden beim Start gelöscht (0 = nie löschen)
 keep_days = 90
 
+[dictionary]
+# Lern-Wörterbuch: Korrigierst du ein diktiertes Wort im Textfeld, merkt sich Dictum die richtige Schreibweise.
+# Dafür liest es einige Sekunden nach dem Einfügen den Text im Feld (nur lokal, nie Passwortfelder).
+# Aus, solange du es nicht einschaltest (Reiter Wörterbuch).
+auto_learn = false
+learn_delay = 10   # Sekunden nach dem Einfügen, bevor nachgesehen wird
+
 [styles]
 # Wie förmlich der Text aussieht, je nachdem, in welches Programm du diktierst. Ein Stil ändert nur
 # Groß-/Kleinschreibung und Satzzeichen, nie die Wörter.
