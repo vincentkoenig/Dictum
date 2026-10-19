@@ -43,10 +43,10 @@ from ..config import DEFAULT_PATH, DESKTOP_DIR, REPO_ROOT
 from ..history import DB_PATH
 from ..logsetup import LOG_PATH
 from ..settings_io import save_settings
+from .hotkey_field import HotkeyField
 from .icons import mic_icon
 from .labels import (
     ENGINE_LABELS,
-    HOTKEY_PRESETS,
     LANGUAGE_LABELS,
     MODE_LABELS,
     MODEL_CHOICES,
@@ -292,9 +292,10 @@ class SettingsTab(QWidget):
         super().__init__()
         self.app = app
 
-        self.hotkey = QComboBox()
-        for label, keys in HOTKEY_PRESETS:
-            self.hotkey.addItem(label, keys)
+        hk = app.settings.hotkey
+        self.hotkey = HotkeyField(app, hk.keys)
+        self.paste_last = HotkeyField(app, hk.paste_last, optional=True)
+        self.copy_last = HotkeyField(app, hk.copy_last, optional=True)
         self.mode = QComboBox()
         _fill(self.mode, MODE_LABELS)
         self.language = QComboBox()
@@ -321,7 +322,7 @@ class SettingsTab(QWidget):
 
         diktat = QGroupBox("Diktieren")
         form = QFormLayout(diktat)
-        form.addRow("Taste:", self.hotkey)
+        form.addRow("Diktier-Taste:", self.hotkey)
         form.addRow("Bedienung:", self.mode)
         form.addRow("Sprache:", self.language)
         form.addRow("Spracherkennung:", self.engine)
@@ -329,6 +330,8 @@ class SettingsTab(QWidget):
         form.addRow(self.cleanup)
         form.addRow("KI-Anbieter:", self.provider)
         form.addRow(self.sounds)
+        form.addRow("Letztes Diktat einfügen:", self.paste_last)
+        form.addRow("Letztes Diktat kopieren:", self.copy_last)
 
         meeting = QGroupBox("Meetings")
         mform = QFormLayout(meeting)
@@ -346,7 +349,7 @@ class SettingsTab(QWidget):
         self.restart_btn = QPushButton("Speichern und neu starten")
         self.restart_btn.clicked.connect(lambda: self.save(restart=True))
         self.message = _muted(QLabel(
-            "Taste und lokales Modell wirken erst nach einem Neustart, alles andere sofort."
+            "Das lokale Modell wirkt erst nach einem Neustart, alles andere sofort. Esc bricht eine laufende Aufnahme ab."
         ))
         self.message.setWordWrap(True)
         bottom = QHBoxLayout()
@@ -367,12 +370,9 @@ class SettingsTab(QWidget):
         """Füllt die Felder aus den aktuellen Einstellungen. Was im Tray-Menü schon geändert
         wurde (Sprache, Modus …), kommt aus dem laufenden Zustand der App."""
         s, app = self.app.settings, self.app
-        keys = list(s.hotkey.keys)
-        index = self.hotkey.findData(keys)
-        if index < 0:  # eigene Kombination aus settings.toml
-            self.hotkey.addItem("Eigene: " + " + ".join(keys), keys)
-            index = self.hotkey.count() - 1
-        self.hotkey.setCurrentIndex(index)
+        self.hotkey.set_keys(s.hotkey.keys)
+        self.paste_last.set_keys(s.hotkey.paste_last)
+        self.copy_last.set_keys(s.hotkey.copy_last)
         _select(self.mode, app.get("mode"))
         _select(self.language, app.get("language"))
         _select(self.engine, app.get("engine"))
@@ -388,7 +388,10 @@ class SettingsTab(QWidget):
 
     def collect(self) -> dict[str, dict[str, object]]:
         return {
-            "hotkey": {"keys": list(self.hotkey.currentData()), "mode": self.mode.currentData()},
+            "hotkey": {
+                "keys": self.hotkey.keys, "mode": self.mode.currentData(),
+                "paste_last": self.paste_last.keys, "copy_last": self.copy_last.keys,
+            },
             "transcription": {
                 "language": self.language.currentData(),
                 "engine": self.engine.currentData(),

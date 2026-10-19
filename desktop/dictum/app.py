@@ -34,6 +34,7 @@ import time
 import winsound
 
 import numpy as np
+import pyperclip
 from PySide6.QtCore import QObject, QTimer, Signal
 from PySide6.QtWidgets import QApplication
 
@@ -108,6 +109,8 @@ class DictumApp:
             hold_threshold=settings.hotkey.hold_threshold,
         )
         self.listener = HotkeyListener(settings.hotkey.keys, self.machine)
+        self._last_text = ""  # zuletzt eingefügter Text (für "erneut einfügen" / "kopieren")
+        self._set_extra_hotkeys(settings.hotkey)
         # Meetings: braucht notify/refresh vom Tray – das Tray braucht die Meetings fürs
         # Menü. Deshalb über kleine Lambdas verbunden, die erst später aufgerufen werden.
         self.meetings = MeetingController(
@@ -205,15 +208,17 @@ class DictumApp:
 
     def apply_settings(self, new: Settings) -> list[str]:
         """Übernimmt neu gespeicherte Einstellungen. Das meiste wirkt sofort. Was einen Neustart
-        braucht (Taste, lokales Modell), wird als Liste zurückgegeben, damit das Fenster es sagen kann."""
+        braucht (lokales Modell), wird als Liste zurückgegeben, damit das Fenster es sagen kann."""
         old = self.settings
         needs_restart = []
-        if new.hotkey.keys != old.hotkey.keys:
-            needs_restart.append("die Taste")
         if new.transcription.model != old.transcription.model:
             needs_restart.append("das lokale Modell")
 
-        # Laufende Bausteine auf die neuen Werte stellen …
+        # Laufende Bausteine auf die neuen Werte stellen … Tasten wirken sofort, ohne Neustart
+        self.listener.set_keys(new.hotkey.keys)
+        self._set_extra_hotkeys(new.hotkey)
+        self.hotkey_text = hotkey_label(new.hotkey.keys)
+        self.tray.set_hotkey_label(self.hotkey_text)
         self.machine.mode = new.hotkey.mode
         self.machine.hold_threshold = new.hotkey.hold_threshold
         self.local.language = self.cloud.language = new.transcription.language
@@ -229,6 +234,41 @@ class DictumApp:
             setattr(old, section, getattr(new, section))
         log.info("Einstellungen übernommen (Neustart nötig für: %s)", ", ".join(needs_restart) or "nichts")
         return needs_restart
+
+    def set_hotkeys_enabled(self, enabled: bool) -> None:
+        self.listener.set_enabled(enabled)
+
+    def _set_extra_hotkeys(self, hk) -> None:
+        self.listener.set_trigger("paste_last", hk.paste_last, self.paste_last)
+        self.listener.set_trigger("copy_last", hk.copy_last, self.copy_last)
+
+    def last_text(self) -> str:
+        """Das letzte Diktat: aus dem Speicher, sonst aus dem Verlauf (nach einem Neustart)."""
+        if self._last_text:
+            return self._last_text
+        try:
+            entries = self.history.recent(1)
+        except Exception:
+            return ""
+        return entries[0].text if entries else ""
+
+    def paste_last(self) -> None:
+        """Hotkey: das letzte Diktat noch einmal einfügen (z. B. wenn das Feld es verschluckt hat)."""
+        text = self.last_text()
+        if not text:
+            self.overlay.flash("Noch kein Diktat vorhanden")
+            return
+        # In einem eigenen Thread: Einfügen wartet kurz, und der Tastatur-Thread soll frei bleiben
+        threading.Thread(target=insert_text, args=(text,), daemon=True).start()
+
+    def copy_last(self) -> None:
+        """Hotkey: das letzte Diktat nur in die Zwischenablage legen."""
+        text = self.last_text()
+        if not text:
+            self.overlay.flash("Noch kein Diktat vorhanden")
+            return
+        pyperclip.copy(text)
+        self.overlay.flash("Letztes Diktat kopiert")
 
     def open_dictionary(self) -> None:
         os.startfile(DICTIONARY_PATH)  # öffnet die Datei im Standard-Editor
@@ -268,7 +308,7 @@ class DictumApp:
     def _cancel(self) -> None:
         self.recorder.stop()
         self.overlay.hide()
-        log.debug("Aufnahme verworfen (andere Tastenkombination)")
+        log.debug("Aufnahme verworfen (andere Taste oder Esc)")
 
     # --- Hintergrund-Threads ---------------------------------------------------------
 
@@ -318,6 +358,7 @@ class DictumApp:
 
         log.info("Fertig: Erkennung %.1f s · Bereinigung %.1f s → %r", t1 - t0, t2 - t1, text)
         self.overlay.hide()
+        self._last_text = text
         insert_text(text)
         self._remember(raw, text, audio, cleaned, snippet is not None)
 

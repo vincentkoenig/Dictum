@@ -50,8 +50,8 @@ class Tray(QObject):
         m = self.menu
         meetings = self.app.meetings
 
-        header = m.addAction(f"Dictum – {self.hotkey_label}")
-        header.setEnabled(False)
+        self.header = m.addAction(f"Dictum – {self.hotkey_label}")
+        self.header.setEnabled(False)
         m.addAction("Dictum öffnen").triggered.connect(lambda: self._open_window())
         m.addSeparator()
 
@@ -137,6 +137,13 @@ class Tray(QObject):
 
     def start(self) -> None:
         self.icon.show()
+
+    def set_hotkey_label(self, text: str) -> None:
+        """Neue Taste anzeigen (Menü-Kopf und Tooltip). Nur im Hauptthread aufrufen."""
+        self.hotkey_label = text
+        self.header.setText(f"Dictum – {text}")
+        if not self._recording:
+            self.icon.setToolTip(f"Dictum ({text})")
 
     def stop(self) -> None:
         self.icon.hide()  # sonst bleibt nach dem Beenden ein "Geister-Symbol" in der Taskleiste

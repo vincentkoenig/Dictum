@@ -28,14 +28,3 @@ TEMPLATE_LABELS = {
     "note": "Notiz",
 }
 MODEL_CHOICES = ["tiny", "base", "small", "medium", "large-v3-turbo"]
-
-# Hotkey-Voreinstellungen: Beschriftung → Tasten (wie in settings.toml). Ungeeignete
-# Kombinationen auf deutschen Tastaturen (Strg+Alt = AltGr, Strg+Umschalt) fehlen mit Absicht.
-HOTKEY_PRESETS: list[tuple[str, list[str]]] = [
-    ("Strg rechts", ["ctrl_r"]),
-    ("Umschalt rechts", ["shift_r"]),
-    ("F8", ["f8"]),
-    ("F9", ["f9"]),
-    ("F10", ["f10"]),
-    ("Win + Alt", ["win", "alt"]),
-]

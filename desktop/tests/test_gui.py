@@ -102,7 +102,10 @@ class FakeApp:
 
     def apply_settings(self, new):
         self.applied.append(new)
-        return ["die Taste"] if new.hotkey.keys != self.settings.hotkey.keys else []
+        return ["das lokale Modell"] if new.transcription.model != self.settings.transcription.model else []
+
+    def set_hotkeys_enabled(self, enabled):
+        self.hotkeys_enabled = enabled
 
     def restart(self):
         self.restarted = True
@@ -241,17 +244,20 @@ def test_einstellungen_laden_und_speichern(app, qapp, tmp_path):
     shutil.copy(DEFAULT_PATH, path)
     window = MainWindow(app)
     tab = window.settings_tab
-    assert tab.hotkey.currentData() == ["ctrl_r"]
+    assert tab.hotkey.keys == ["ctrl_r"]
     assert tab.cleanup.isChecked() and tab.language.currentData() == "de"
 
     tab.language.setCurrentIndex(tab.language.findData("en"))
-    tab.hotkey.setCurrentIndex(tab.hotkey.findData(["f9"]))
+    tab.hotkey.set_keys(["f9"])
+    tab.copy_last.set_keys([])
+    tab.model.setCurrentIndex(tab.model.findData("base"))
     tab.keep_days.setValue(30)
     assert tab.save(path=path) is True
 
     saved = load_settings(path)
     assert saved.transcription.language == "en" and saved.hotkey.keys == ["f9"] and saved.history.keep_days == 30
-    assert app.applied and "Neustart" in tab.message.text() and "die Taste" in tab.message.text()
+    assert saved.hotkey.copy_last == [] and saved.hotkey.paste_last == ["shift", "alt", "z"]
+    assert app.applied and "Neustart" in tab.message.text() and "das lokale Modell" in tab.message.text()
     assert ("autostart", False) in app.set_calls
     assert app.restarted is False
 
@@ -265,11 +271,55 @@ def test_speichern_und_neu_starten_ruft_restart(app, qapp, tmp_path):
     assert app.restarted is True
 
 
-def test_unbekannte_taste_aus_der_datei_erscheint_als_eigene_kombination(app, qapp):
+def test_eigene_kombination_aus_der_datei_wird_angezeigt(app, qapp):
     app.settings.hotkey.keys = ["win", "shift"]
     window = MainWindow(app)
     tab = window.settings_tab
-    assert tab.hotkey.currentText().startswith("Eigene:") and tab.hotkey.currentData() == ["win", "shift"]
+    assert tab.hotkey.keys == ["win", "shift"] and tab.hotkey.label.text() == "Win+Umschalt"
+
+
+class FakeCapture:
+    """Ersetzt die echte Tastatur im Dialog: liefert nacheinander vorbereitete Eingaben."""
+
+    script: list[list[str]] = []
+
+    def __init__(self, on_update, on_done):
+        self.on_done = on_done
+
+    def start(self):
+        self.on_done(FakeCapture.script.pop(0))
+
+    def stop(self):
+        pass
+
+
+def test_taste_per_dialog_waehlen(app, qapp):
+    from dictum.gui.hotkey_field import HotkeyField
+
+    FakeCapture.script = [["a"], ["mouse_x1"]]  # erst unbrauchbar, dann eine Maustaste
+    field = HotkeyField(app, ["ctrl_r"], capture_factory=FakeCapture)
+    seen = []
+    field.changed.connect(lambda: seen.append(field.keys))
+    field._change()
+    assert field.keys == ["mouse_x1"] and seen == [["mouse_x1"]]
+    assert app.hotkeys_enabled is True  # nach dem Dialog wieder aktiv
+
+
+def test_dialog_esc_bricht_ab(app, qapp):
+    from dictum.gui.hotkey_field import HotkeyField
+
+    FakeCapture.script = [["esc"]]
+    field = HotkeyField(app, ["ctrl_r"], capture_factory=FakeCapture)
+    field._change()
+    assert field.keys == ["ctrl_r"]
+
+
+def test_optionale_taste_laesst_sich_ausschalten(app, qapp):
+    from dictum.gui.hotkey_field import HotkeyField
+
+    field = HotkeyField(app, ["shift", "alt", "z"], optional=True)
+    field.off_btn.click()
+    assert field.keys == [] and field.label.text() == "Aus"
 
 
 def test_fenster_schliessen_versteckt_nur(app, qapp):
