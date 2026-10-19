@@ -19,6 +19,8 @@ from string import Template
 from PySide6.QtGui import QColor, QFont, QGuiApplication, QPalette
 from PySide6.QtCore import Qt
 
+from .fonts import load_fonts
+
 MODES = ("system", "light", "dark")
 
 # Farben je Modus. Namen wie im Stylesheet unten ($name).
@@ -35,12 +37,12 @@ COLORS = {
     },
 }
 
-# Schriften: Überschriften in einer Serife mit starkem Kontrast, Text in Segoe UI Variable. Beides ist in
-# Windows 11 eingebaut. Die erste Schrift der Liste gewinnt, fehlt sie, nimmt Qt die nächste.
-SERIF_FAMILY = "Sitka Display"
-SANS_FAMILY = "Segoe UI Variable Display"
-SERIF = f'"{SERIF_FAMILY}", "Georgia", "Cambria", serif'
-SANS = f'"{SANS_FAMILY}", "Segoe UI Variable Text", "Segoe UI", sans-serif'
+# Schriften: Überschriften in Instrument Serif, Text in Inter (beide liegen im Programm, siehe fonts.py).
+# Die erste Schrift der Liste gewinnt, fehlt sie, nimmt Qt die nächste (Windows-Schriften als Ersatz).
+SERIF_FAMILY = "Instrument Serif"
+SANS_FAMILY = "Inter"
+SERIF = f'"{SERIF_FAMILY}", "Sitka Display", "Georgia", serif'
+SANS = f'"{SANS_FAMILY}", "Segoe UI Variable Display", "Segoe UI", sans-serif'
 
 STYLESHEET = Template("""
 QWidget { color: $text; font-family: $sans; font-size: 10pt; }
@@ -52,10 +54,10 @@ QScrollArea > QWidget > QWidget { background: transparent; }
 QStackedWidget { background: transparent; }
 
 QLabel { background: transparent; }
-QLabel#h1 { font-family: $serif; font-size: 26pt; }
-QLabel#h2 { font-family: $serif; font-size: 15pt; }
-QLabel#brand { font-family: $serif; font-size: 18pt; }
-QLabel#bignum { font-family: $serif; font-size: 22pt; }
+QLabel#h1 { font-family: $serif; font-size: 32pt; }
+QLabel#h2 { font-family: $serif; font-size: 19pt; }
+QLabel#brand { font-family: $serif; font-size: 22pt; }
+QLabel#bignum { font-family: $serif; font-size: 28pt; }
 QLabel#muted { color: $muted; }
 
 QPushButton { background: $card; border: 1px solid $border; border-radius: 10px; padding: 7px 16px; }
@@ -103,7 +105,7 @@ QCheckBox::indicator:checked { background: $btn; border: 1px solid $btn; }
 QFrame#hero { background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #3a281a, stop:0.55 #1a1410, stop:1 #0d0d0d);
               border-radius: 18px; border: none; }
 QFrame#hero QLabel { background: transparent; color: #f6f1e9; }
-QLabel#herotitle { font-family: $serif; font-size: 22pt; }
+QLabel#herotitle { font-family: $serif; font-size: 28pt; }
 QLabel#herosub { color: #d9d2c7; font-size: 11pt; }
 QPushButton#herobtn { background: #f3eee6; color: #1c1b19; border: none; border-radius: 10px;
                       padding: 10px 20px; font-weight: 600; }
@@ -166,6 +168,7 @@ def stylesheet_for(kind: str) -> str:
 def apply(app, mode: str = "system") -> str:
     """Stellt Stil, Palette und Stylesheet ein. Gibt "light" oder "dark" zurück."""
     kind = effective(mode)
+    load_fonts()  # vor dem ersten Widget, damit die Stylesheet-Schriften gefunden werden
     app.setStyle("Fusion")
     app.setFont(QFont(SANS_FAMILY, 10))
     app.setPalette(palette_for(kind))

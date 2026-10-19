@@ -679,3 +679,14 @@ def test_flow_bar_und_ton_einstellungen_werden_gespeichert(app, qapp, tmp_path):
     assert tab.save(path=path)
     saved = load_settings(path)
     assert saved.feedback.sounds and saved.feedback.sound_volume == 35 and saved.ui.flow_bar is False
+
+
+def test_eigene_schriften_werden_geladen(qapp):
+    from dictum.gui import fonts, theme
+
+    families = fonts.load_fonts()
+    assert "Inter" in families and "Instrument Serif" in families
+    assert theme.SANS_FAMILY == "Inter" and theme.SERIF_FAMILY == "Instrument Serif"
+    from PySide6.QtGui import QFontDatabase
+    assert "Instrument Serif" in QFontDatabase.families()
+    assert (fonts.FONT_DIR / "OFL-Inter.txt").exists() and (fonts.FONT_DIR / "OFL-InstrumentSerif.txt").exists()

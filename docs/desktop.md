@@ -528,6 +528,13 @@ Rundungen, Karten und Knöpfe. Die Farben stehen in einer Tabelle je Modus, Umsc
 einsetzen“. Überschriften sind Serifenschrift (Georgia), der Rest Segoe UI. Die Symbole der Seitenleiste sind
 selbst gemalt (`icons.nav_icon`), damit sie nicht von einer Symbolschrift abhängen, die es nicht überall gibt.
 
+**Schriften (`gui/fonts.py`):** Inter für den Text, Instrument Serif für Überschriften und große Zahlen. Beide
+liegen als Dateien in `desktop/assets/fonts` (freie Lizenz SIL OFL, die Lizenztexte liegen daneben, Quelle: das
+Repository „google/fonts“) und werden beim Start nur in den Speicher geladen, installiert wird nichts. Instrument
+Serif ist schmal und hat nur eine Strichstärke, deshalb sind die Überschriften größer eingestellt. Fehlt eine
+Datei, nimmt Qt die nächste Schrift der Liste in `theme.py` (Sitka, Georgia, Segoe UI). Die Dateien sind im
+Programmpaket (`dictum.spec`) mit dabei.
+
 **Keine Windows-Titelleiste:** Das Fenster hat keinen Rahmen mehr (`FramelessWindowHint`), also auch keine
 Leiste mit Verkleinern/Vergrößern/Schließen in der Akzentfarbe. Die drei Knöpfe sitzen stattdessen oben rechts im
 Fenster. Drei kleine Bausteine ersetzen, was Windows sonst liefert:

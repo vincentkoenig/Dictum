@@ -86,7 +86,7 @@ class Gauge(QWidget):
             painter.drawArc(rect.adjusted(thick / 2, thick / 2, -thick / 2, -thick / 2), 180 * 16,
                             -int(180 * 16 * share))
         baseline = rect.top() + side / 2           # Mittellinie des Halbkreises: hier endet der sichtbare Teil
-        painter.setFont(QFont(theme.SERIF_FAMILY, 24))
+        painter.setFont(QFont(theme.SERIF_FAMILY, 30))
         painter.setPen(QColor(theme.current("text")))
         painter.drawText(QRectF(rect.left(), baseline - 52, side, 48), Qt.AlignmentFlag.AlignCenter,
                          de(self.value) if self.value else "–")
