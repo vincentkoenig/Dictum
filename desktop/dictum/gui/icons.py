@@ -83,7 +83,7 @@ def nav_icon(name: str, color: str, size: int = 20) -> QIcon:
         p.drawLine(pt(6, 12.4), pt(14, 3))
         p.drawLine(pt(14, 12.4), pt(6, 3))
     elif name == "style":
-        font = QFont("Instrument Serif", int(13 * s))
+        font = QFont("EB Garamond", int(13 * s))
         font.setBold(True)
         p.setFont(font)
         p.drawText(r(0, 0, 20, 20), Qt.AlignmentFlag.AlignCenter, "Aa")

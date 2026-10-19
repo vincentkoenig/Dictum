@@ -685,8 +685,8 @@ def test_eigene_schriften_werden_geladen(qapp):
     from dictum.gui import fonts, theme
 
     families = fonts.load_fonts()
-    assert "Inter" in families and "Instrument Serif" in families
-    assert theme.SANS_FAMILY == "Inter" and theme.SERIF_FAMILY == "Instrument Serif"
+    assert any(f.startswith("Figtree") for f in families) and "EB Garamond" in families
+    assert theme.SANS_FAMILY == "Figtree" and theme.SERIF_FAMILY == "EB Garamond"
     from PySide6.QtGui import QFontDatabase
-    assert "Instrument Serif" in QFontDatabase.families()
-    assert (fonts.FONT_DIR / "OFL-Inter.txt").exists() and (fonts.FONT_DIR / "OFL-InstrumentSerif.txt").exists()
+    assert "Figtree" in QFontDatabase.families() and "EB Garamond" in QFontDatabase.families()
+    assert (fonts.FONT_DIR / "OFL-Figtree.txt").exists() and (fonts.FONT_DIR / "OFL-EBGaramond.txt").exists()

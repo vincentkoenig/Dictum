@@ -1,11 +1,14 @@
-"""Eigene Schriften: Inter für den Text, Instrument Serif für Überschriften.
+"""Eigene Schriften: Figtree für den Text, EB Garamond für Banner und große Zahlen.
 
 Die Standardschriften von Windows sehen überall gleich aus. Deshalb liegen zwei freie Schriften im Programm
 (`assets/fonts`, Lizenz SIL Open Font License, siehe die OFL-Dateien dort). Qt lädt sie beim Start in den
 Speicher (`QFontDatabase.addApplicationFont`); installiert wird nichts auf dem PC.
 
-* **Inter**: ruhige, gut lesbare Schrift für Oberflächen (eine Datei mit allen Strichstärken).
-* **Instrument Serif**: schlanke Serife mit Kursiv, ähnlich der Schrift in den Wispr-Überschriften.
+Es sind dieselben Schriften, die Wispr Flow selbst mitliefert (nachgesehen in dessen Programmordner und im
+Stylesheet der App: `html { font-family: Figtree }`, Banner und große Zahlen in EB Garamond):
+
+* **Figtree**: freundliche, geometrische Schrift für Oberfläche und Seitentitel.
+* **EB Garamond**: klassische Serife mit Kursiv, für Banner-Überschriften und die großen Kennzahlen.
 
 Fehlt eine Datei oder lässt sie sich nicht laden, nimmt Qt die nächste Schrift der Liste in theme.py.
 """
@@ -21,7 +24,7 @@ from ..config import RESOURCE_DIR
 log = logging.getLogger(__name__)
 
 FONT_DIR = RESOURCE_DIR / "assets" / "fonts"
-FILES = ("Inter-Variable.ttf", "InstrumentSerif-Regular.ttf", "InstrumentSerif-Italic.ttf")
+FILES = ("Figtree-Variable.ttf", "EBGaramond-Variable.ttf", "EBGaramond-Italic-Variable.ttf")
 
 _loaded: list[str] | None = None
 

@@ -37,11 +37,12 @@ COLORS = {
     },
 }
 
-# Schriften: Überschriften in Instrument Serif, Text in Inter (beide liegen im Programm, siehe fonts.py).
+# Schriften wie in Wispr Flow: Text und Seitentitel in Figtree, Banner und große Zahlen in EB Garamond
+# (beide liegen im Programm, siehe fonts.py).
 # Die erste Schrift der Liste gewinnt, fehlt sie, nimmt Qt die nächste (Windows-Schriften als Ersatz).
-SERIF_FAMILY = "Instrument Serif"
-SANS_FAMILY = "Inter"
-SERIF = f'"{SERIF_FAMILY}", "Sitka Display", "Georgia", serif'
+SERIF_FAMILY = "EB Garamond"
+SANS_FAMILY = "Figtree"
+SERIF = f'"{SERIF_FAMILY}", "Georgia", serif'
 SANS = f'"{SANS_FAMILY}", "Segoe UI Variable Display", "Segoe UI", sans-serif'
 
 STYLESHEET = Template("""
@@ -54,10 +55,10 @@ QScrollArea > QWidget > QWidget { background: transparent; }
 QStackedWidget { background: transparent; }
 
 QLabel { background: transparent; }
-QLabel#h1 { font-family: $serif; font-size: 32pt; }
-QLabel#h2 { font-family: $serif; font-size: 19pt; }
-QLabel#brand { font-family: $serif; font-size: 22pt; }
-QLabel#bignum { font-family: $serif; font-size: 28pt; }
+QLabel#h1 { font-size: 24pt; font-weight: 600; }
+QLabel#h2 { font-size: 15pt; font-weight: 600; }
+QLabel#brand { font-size: 17pt; font-weight: 700; }
+QLabel#bignum { font-family: $serif; font-size: 30pt; }
 QLabel#muted { color: $muted; }
 
 QPushButton { background: $card; border: 1px solid $border; border-radius: 10px; padding: 7px 16px; }
@@ -105,7 +106,7 @@ QCheckBox::indicator:checked { background: $btn; border: 1px solid $btn; }
 QFrame#hero { background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #3a281a, stop:0.55 #1a1410, stop:1 #0d0d0d);
               border-radius: 18px; border: none; }
 QFrame#hero QLabel { background: transparent; color: #f6f1e9; }
-QLabel#herotitle { font-family: $serif; font-size: 28pt; }
+QLabel#herotitle { font-family: $serif; font-size: 30pt; }
 QLabel#herosub { color: #d9d2c7; font-size: 11pt; }
 QPushButton#herobtn { background: #f3eee6; color: #1c1b19; border: none; border-radius: 10px;
                       padding: 10px 20px; font-weight: 600; }

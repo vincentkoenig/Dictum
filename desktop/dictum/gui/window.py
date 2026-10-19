@@ -226,7 +226,7 @@ class HomeTab(QWidget):
         hero.setObjectName("hero")
         hero_layout = QVBoxLayout(hero)
         hero_layout.setContentsMargins(28, 24, 28, 24)
-        hero_layout.addWidget(_named(QLabel("Mach Dictum zu deiner Stimme"), "herotitle"))
+        hero_layout.addWidget(_named(QLabel("Mach Dictum zu <i>deiner Stimme</i>"), "herotitle"))
         hero_layout.addWidget(_named(QLabel("Stelle verschiedene Schreibstile für verschiedene Programme ein."), "herosub"))
         hero_layout.addSpacing(8)
         self.hero_btn = QPushButton("Jetzt einrichten")

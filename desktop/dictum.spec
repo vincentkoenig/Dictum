@@ -12,7 +12,7 @@ datas = [
     ("dictionary.example.txt", "."),
     ("snippets.example.toml", "."),
     ("assets/dictum.ico", "assets"),
-    ("assets/fonts", "assets/fonts"),   # Inter und Instrument Serif samt Lizenzen
+    ("assets/fonts", "assets/fonts"),   # Figtree und EB Garamond samt Lizenzen
 ]
 # Der Sprachfilter von faster-whisper ist eine .onnx-Datei im Paket; PyInstaller sieht sie nicht von selbst
 datas += collect_data_files("faster_whisper")
