@@ -107,6 +107,16 @@ class FakeApp:
     def set_hotkeys_enabled(self, enabled):
         self.hotkeys_enabled = enabled
 
+    def key_status(self):
+        return {"ANTHROPIC_API_KEY": True, "OPENAI_API_KEY": False}
+
+    def reload_keys(self):
+        self.keys_reloaded = True
+        return {"ANTHROPIC_API_KEY": True, "OPENAI_API_KEY": True}
+
+    def open_env(self):
+        self.env_opened = True
+
     def restart(self):
         self.restarted = True
 
@@ -332,3 +342,24 @@ def test_fenster_schliessen_versteckt_nur(app, qapp):
     window.show()
     window.close()
     assert len(app.tray.messages) == 1  # Hinweis nur beim ersten Mal
+
+
+def test_schluessel_status_und_neu_laden(app, qapp):
+    window = MainWindow(app)
+    tab = window.settings_tab
+    assert "❌" in tab.key_status.text() and "✅" in tab.key_status.text()
+    tab._reload_keys()
+    assert app.keys_reloaded is True and "❌" not in tab.key_status.text()
+
+
+def test_openai_modelle_werden_gespeichert(app, qapp, tmp_path):
+    path = tmp_path / "settings.toml"
+    shutil.copy(DEFAULT_PATH, path)
+    window = MainWindow(app)
+    tab = window.settings_tab
+    tab.openai_stt.setCurrentIndex(tab.openai_stt.findData("gpt-4o-transcribe"))
+    tab.openai_cleanup.setCurrentIndex(tab.openai_cleanup.findData("gpt-5-nano"))
+    assert tab.save(path=path)
+    saved = load_settings(path)
+    assert saved.transcription.openai_model == "gpt-4o-transcribe"
+    assert saved.cleanup.openai_model == "gpt-5-nano"

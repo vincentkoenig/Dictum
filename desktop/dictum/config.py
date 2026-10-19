@@ -135,11 +135,12 @@ def _validate(settings: Settings) -> None:
         raise ValueError(f"Ungültiger provider '{settings.cleanup.provider}'. Erlaubt: {VALID_PROVIDERS}")
 
 
-def load_env() -> None:
+def load_env(override: bool = False) -> None:
     """Lädt API-Keys aus der .env im Projektordner in die Umgebungsvariablen.
 
     Die SDKs von Anthropic und OpenAI lesen ANTHROPIC_API_KEY bzw. OPENAI_API_KEY
     automatisch aus der Umgebung – wir müssen die Keys also nie selbst im Code anfassen.
-    Bereits gesetzte Umgebungsvariablen haben Vorrang (override=False).
+    Bereits gesetzte Umgebungsvariablen haben Vorrang (override=False). Mit override=True
+    gewinnt die Datei – so übernimmt Dictum einen frisch eingetragenen Key ohne Neustart.
     """
-    load_dotenv(REPO_ROOT / ".env", override=False)
+    load_dotenv(REPO_ROOT / ".env", override=override)

@@ -50,6 +50,8 @@ from .labels import (
     LANGUAGE_LABELS,
     MODE_LABELS,
     MODEL_CHOICES,
+    OPENAI_CLEANUP_MODELS,
+    OPENAI_STT_MODELS,
     PROVIDER_LABELS,
     TEMPLATE_LABELS,
 )
@@ -191,11 +193,14 @@ class StartTab(QWidget):
             return f"{mark} {text}{tail}"
 
         have = lambda name: bool(os.environ.get(name))  # noqa: E731
+        wanted = self.app.get("engine") == "openai" or self.app.get("provider") == "openai"
         account = have("DICTUM_EMAIL") and have("DICTUM_PASSWORD")
         self.checks_label.setText("<br>".join([
             row(mic_ok, "Mikrofon gefunden", "– Windows-Einstellungen → Datenschutz → Mikrofon"),
             row(have("ANTHROPIC_API_KEY"), "Anthropic-Key (KI-Bereinigung)", "– in .env eintragen"),
-            row(have("OPENAI_API_KEY") or None, "OpenAI-Key (optional: Cloud-Erkennung)"),
+            row(have("OPENAI_API_KEY") or (False if wanted else None),
+                "OpenAI-Key" + ("" if wanted else " (optional: Cloud-Erkennung)"),
+                "– in .env eintragen (Einstellungen → Schlüsseldatei öffnen)"),
             row(account, "Dictum-Konto (Meetings, Abgleich)", "– DICTUM_EMAIL/PASSWORD in .env"),
             row(self.app.get("autostart") or None, "Startet mit Windows"),
         ]))
@@ -305,9 +310,19 @@ class SettingsTab(QWidget):
         self.model = QComboBox()
         for name in MODEL_CHOICES:
             self.model.addItem(name, name)
+        self.openai_stt = QComboBox()
+        _fill(self.openai_stt, OPENAI_STT_MODELS)
         self.cleanup = QCheckBox("KI-Bereinigung (Füllwörter, Satzzeichen, Listen)")
         self.provider = QComboBox()
         _fill(self.provider, PROVIDER_LABELS)
+        self.openai_cleanup = QComboBox()
+        _fill(self.openai_cleanup, OPENAI_CLEANUP_MODELS)
+        self.key_status = QLabel()
+        self.key_status.setTextFormat(Qt.TextFormat.RichText)
+        open_env = QPushButton("Schlüsseldatei öffnen")
+        open_env.clicked.connect(self.app.open_env)
+        reload_env = QPushButton("Schlüssel neu laden")
+        reload_env.clicked.connect(self._reload_keys)
         self.sounds = QCheckBox("Piepton bei Start und Ende der Aufnahme")
         self.sys_audio = QCheckBox("PC-Ton aufnehmen (Teams, Zoom …)")
         self.chunk = QSpinBox()
@@ -327,11 +342,22 @@ class SettingsTab(QWidget):
         form.addRow("Sprache:", self.language)
         form.addRow("Spracherkennung:", self.engine)
         form.addRow("Lokales Modell:", self.model)
+        form.addRow("OpenAI-Modell (Erkennung):", self.openai_stt)
         form.addRow(self.cleanup)
         form.addRow("KI-Anbieter:", self.provider)
+        form.addRow("OpenAI-Modell (Bereinigung):", self.openai_cleanup)
         form.addRow(self.sounds)
         form.addRow("Letztes Diktat einfügen:", self.paste_last)
         form.addRow("Letztes Diktat kopieren:", self.copy_last)
+
+        keys_box = QGroupBox("API-Schlüssel (nur in der Datei .env, nie im Repo)")
+        keys_layout = QVBoxLayout(keys_box)
+        keys_layout.addWidget(self.key_status)
+        key_buttons = QHBoxLayout()
+        key_buttons.addWidget(open_env)
+        key_buttons.addWidget(reload_env)
+        key_buttons.addStretch(1)
+        keys_layout.addLayout(key_buttons)
 
         meeting = QGroupBox("Meetings")
         mform = QFormLayout(meeting)
@@ -359,6 +385,7 @@ class SettingsTab(QWidget):
 
         layout = QVBoxLayout(self)
         layout.addWidget(diktat)
+        layout.addWidget(keys_box)
         layout.addWidget(meeting)
         layout.addWidget(privat)
         layout.addLayout(bottom)
@@ -377,6 +404,9 @@ class SettingsTab(QWidget):
         _select(self.language, app.get("language"))
         _select(self.engine, app.get("engine"))
         _select(self.model, s.transcription.model)
+        _select(self.openai_stt, s.transcription.openai_model)
+        _select(self.openai_cleanup, s.cleanup.openai_model)
+        self._show_key_status()
         self.cleanup.setChecked(bool(app.get("cleanup")))
         _select(self.provider, app.get("provider"))
         self.sounds.setChecked(s.feedback.sounds)
@@ -385,6 +415,22 @@ class SettingsTab(QWidget):
         self.history_on.setChecked(s.history.enabled)
         self.keep_days.setValue(int(s.history.keep_days))
         self.autostart.setChecked(bool(app.get("autostart")))
+
+    def _show_key_status(self, status: dict[str, bool] | None = None) -> None:
+        status = status or self.app.key_status()
+
+        def mark(name: str, text: str) -> str:
+            return f"{'✅' if status[name] else '❌'} {text}"
+
+        self.key_status.setText(
+            mark("ANTHROPIC_API_KEY", "Anthropic (Claude)") + " &nbsp;·&nbsp; "
+            + mark("OPENAI_API_KEY", "OpenAI")
+            + "<br><span style='color:gray'>Key eintragen: Datei öffnen, nach <code>OPENAI_API_KEY=</code> "
+              "einfügen, speichern, dann „Schlüssel neu laden“.</span>"
+        )
+
+    def _reload_keys(self) -> None:
+        self._show_key_status(self.app.reload_keys())
 
     def collect(self) -> dict[str, dict[str, object]]:
         return {
@@ -396,8 +442,12 @@ class SettingsTab(QWidget):
                 "language": self.language.currentData(),
                 "engine": self.engine.currentData(),
                 "model": self.model.currentData(),
+                "openai_model": self.openai_stt.currentData(),
             },
-            "cleanup": {"enabled": self.cleanup.isChecked(), "provider": self.provider.currentData()},
+            "cleanup": {
+                "enabled": self.cleanup.isChecked(), "provider": self.provider.currentData(),
+                "openai_model": self.openai_cleanup.currentData(),
+            },
             "meeting": {"include_system_audio": self.sys_audio.isChecked(), "chunk_minutes": self.chunk.value()},
             "history": {"enabled": self.history_on.isChecked(), "keep_days": self.keep_days.value()},
             "feedback": {"sounds": self.sounds.isChecked()},

@@ -245,6 +245,32 @@ einen Fehlertyp kennen.
 
 Umschaltbar im Tray-Menü → „Spracherkennung“.
 
+### Mit einem einzigen OpenAI-Key (Stand Oktober 2026)
+
+OpenAI kann beide Schritte übernehmen, jeweils im Reiter *Einstellungen* wählbar:
+
+| Schritt | Modell | Preis (laut OpenAI-Preisseite) |
+|---|---|---|
+| Sprache → Text | `gpt-4o-mini-transcribe` (Standard) | ca. 0,003 $/min |
+| | `gpt-4o-transcribe`, `whisper-1` | ca. 0,006 $/min |
+| Text bereinigen | `gpt-5-nano` | 0,05 / 0,40 $ je 1 Mio. Token (ein/aus) |
+| | `gpt-5-mini` | 0,25 / 2,00 $ |
+| | Claude Haiku 5.5 (zum Vergleich) | 0,10 / 0,50 $ |
+
+Ehrlich gerechnet ist die **Erkennung** der Teil, bei dem OpenAI sich lohnt (schneller als Whisper auf der
+CPU, eine Stunde Diktat ≈ 18 Cent). Bei der **Bereinigung** liegen Haiku und `gpt-5-nano` fast gleichauf.
+Ein Diktat hat ein paar hundert Token, das sind Bruchteile eines Cents. Der echte Vorteil eines
+OpenAI-Keys ist deshalb, dass man **nur einen Anbieter** braucht.
+
+Die gpt-5-Modelle denken standardmäßig erst nach. Für die Bereinigung ist das reine Wartezeit,
+deshalb schickt `OpenAIProvider` `reasoning_effort="minimal"` mit (und versucht es ohne, falls ein Modell
+das nicht kennt).
+
+**Schlüssel:** Der Key steht nur in der Datei `.env` (nie im Repo). Im Reiter *Einstellungen* öffnet
+„Schlüsseldatei öffnen“ die Datei, nach dem Speichern liest „Schlüssel neu laden“ sie ein, ohne Neustart.
+Fehlt der Key, fällt Dictum bei der Erkennung auf das lokale Whisper und bei der Bereinigung auf den
+Rohtext zurück.
+
 ## 5. Meetings am PC (Phase 5)
 
 Tray-Menü → **🔴 Meeting aufnehmen** → Vorlage wählen (Meeting, Interview, Vorlesung, Notiz).

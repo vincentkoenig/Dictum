@@ -42,7 +42,7 @@ from . import autostart
 from .audio import Recorder, duration_seconds
 from .cleanup import clean_text
 from .cloud_transcriber import OpenAITranscriber
-from .config import Settings
+from .config import REPO_ROOT, Settings, load_env
 from .gui.icons import mic_icon
 from .gui.overlay import Overlay
 from .gui.tray import Tray
@@ -269,6 +269,25 @@ class DictumApp:
             return
         pyperclip.copy(text)
         self.overlay.flash("Letztes Diktat kopiert")
+
+    def open_env(self) -> None:
+        """Die Schlüsseldatei im Editor öffnen. Die Keys trägt man selbst ein, Dictum fasst sie nie an."""
+        path = REPO_ROOT / ".env"
+        if not path.exists():
+            path.write_text("ANTHROPIC_API_KEY=\nOPENAI_API_KEY=\n", encoding="utf-8")
+        subprocess.Popen(["notepad.exe", str(path)])
+
+    def reload_keys(self) -> dict[str, bool]:
+        """Liest die .env neu ein und verwirft Verbindungen, die mit dem alten Key aufgebaut wurden."""
+        load_env(override=True)
+        self.cloud._client = None
+        self.provider = create_provider(self.provider.name, self.settings.cleanup)
+        log.info("Schlüssel neu geladen")
+        return self.key_status()
+
+    @staticmethod
+    def key_status() -> dict[str, bool]:
+        return {name: bool(os.environ.get(name)) for name in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY")}
 
     def open_dictionary(self) -> None:
         os.startfile(DICTIONARY_PATH)  # öffnet die Datei im Standard-Editor
