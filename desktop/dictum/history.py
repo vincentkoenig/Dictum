@@ -37,14 +37,15 @@ create table if not exists dictations (
     snippet    integer not null default 0,   -- war es ein Snippet?
     words      integer not null default 0,
     app        text,                   -- Programm, in das diktiert wurde (z. B. "Chrome")
-    cost       real                    -- geschätzte Kosten in US-Dollar (siehe costs.py)
+    cost       real,                   -- geschätzte Kosten in US-Dollar (siehe costs.py)
+    grp        text                    -- Gruppe fürs Programm (KI, Programmieren, Mail …), siehe styles.py
 );
 create index if not exists dictations_created on dictations (created_at desc);
 """
 
 
 # Spalten, die erst später dazukamen: Ältere Datenbanken bekommen sie beim Öffnen nachgerüstet
-MIGRATIONS = {"app": "text", "cost": "real"}
+MIGRATIONS = {"app": "text", "cost": "real", "grp": "text"}
 
 
 @dataclass
@@ -61,6 +62,8 @@ class Stats:
     cost_usd: float = 0.0
     days: list[tuple[date, int]] = field(default_factory=list)          # letzte Tage: Wörter
     top_apps: list[tuple[str, int, int]] = field(default_factory=list)  # (Programm, Wörter, Diktate)
+    groups: list[tuple[str, int, int]] = field(default_factory=list)    # (Gruppe, Wörter, Diktate), größte zuerst
+    cleaned: int = 0                    # Diktate, die die KI bereinigt hat
 
 
 TYPING_WPM = 40  # durchschnittliche Tippgeschwindigkeit, Grundlage für "gesparte Zeit"
@@ -101,13 +104,15 @@ class History:
         return db
 
     def add(self, raw: str, text: str, duration: float | None = None, engine: str = "",
-            cleaned: bool = False, snippet: bool = False, app: str = "", cost: float | None = None) -> None:
+            cleaned: bool = False, snippet: bool = False, app: str = "", cost: float | None = None,
+            group: str = "") -> None:
         words = len(text.split())
         with closing(self._connect()) as db, db:  # "with db" = Transaktion, committet am Ende
             db.execute(
-                "insert into dictations (created_at, raw, text, duration, engine, cleaned, snippet, words, app, cost) "
-                "values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (_now(), raw, text, duration, engine, int(cleaned), int(snippet), words, app or None, cost),
+                "insert into dictations (created_at, raw, text, duration, engine, cleaned, snippet, words, app, cost, grp) "
+                "values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (_now(), raw, text, duration, engine, int(cleaned), int(snippet), words, app or None, cost,
+                 group or None),
             )
 
     def recent(self, limit: int = 200, query: str = "") -> list[Entry]:
@@ -151,11 +156,14 @@ class History:
         """Auswertung über den ganzen Verlauf. `today` gibt es für Tests."""
         today = today or datetime.now().astimezone().date()
         with closing(self._connect()) as db:
-            rows = db.execute("select created_at, words, duration, app, cost from dictations").fetchall()
+            rows = db.execute(
+                "select created_at, words, duration, app, cost, grp, cleaned from dictations"
+            ).fetchall()
 
         stats = Stats()
         per_day: dict[date, int] = {}
         apps: dict[str, list[int]] = {}
+        groups: dict[str, list[int]] = {}
         timed_words = 0
         for row in rows:
             day = _to_local(row["created_at"]).date()
@@ -167,8 +175,14 @@ class History:
             if row["duration"]:
                 stats.speaking_seconds += row["duration"]
                 timed_words += words
+            if row["cleaned"]:
+                stats.cleaned += 1
             if row["app"]:
                 entry = apps.setdefault(row["app"], [0, 0])
+                entry[0] += words
+                entry[1] += 1
+            if row["grp"]:
+                entry = groups.setdefault(row["grp"], [0, 0])
                 entry[0] += words
                 entry[1] += 1
 
@@ -178,6 +192,7 @@ class History:
         stats.streak, stats.best_streak = _streaks(set(per_day), today)
         stats.days = [(today - timedelta(days=n), per_day.get(today - timedelta(days=n), 0))
                       for n in range(days - 1, -1, -1)]
+        stats.groups = sorted(((name, w, c) for name, (w, c) in groups.items()), key=lambda t: -t[1])
         stats.top_apps = sorted(((name, w, c) for name, (w, c) in apps.items()), key=lambda t: -t[1])[:8]
         return stats
 

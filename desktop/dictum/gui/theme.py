@@ -35,8 +35,12 @@ COLORS = {
     },
 }
 
-SERIF = '"Georgia", "Cambria", "Times New Roman", serif'
-SANS = '"Segoe UI Variable Text", "Segoe UI", sans-serif'
+# Schriften: Überschriften in einer Serife mit starkem Kontrast, Text in Segoe UI Variable. Beides ist in
+# Windows 11 eingebaut. Die erste Schrift der Liste gewinnt, fehlt sie, nimmt Qt die nächste.
+SERIF_FAMILY = "Sitka Display"
+SANS_FAMILY = "Segoe UI Variable Display"
+SERIF = f'"{SERIF_FAMILY}", "Georgia", "Cambria", serif'
+SANS = f'"{SANS_FAMILY}", "Segoe UI Variable Text", "Segoe UI", sans-serif'
 
 STYLESHEET = Template("""
 QWidget { color: $text; font-family: $sans; font-size: 10pt; }
@@ -66,6 +70,12 @@ QPushButton#nav:hover { background: $hover; }
 QPushButton#nav:checked { background: $selected; }
 QPushButton#iconbtn { border: none; background: transparent; padding: 8px 10px; border-radius: 10px; }
 QPushButton#iconbtn:hover { background: $hover; }
+QPushButton#winbtn { border: none; background: transparent; padding: 8px 12px; border-radius: 8px; }
+QPushButton#winbtn:hover { background: $hover; }
+QPushButton#winclose { border: none; background: transparent; padding: 8px 12px; border-radius: 8px; }
+QPushButton#winclose:hover { background: $danger; }
+QWidget#root { border: 1px solid $border; }
+QDialog#settings { border: 1px solid $border; }
 
 QLineEdit, QPlainTextEdit, QComboBox, QSpinBox, QListWidget, QTableWidget {
     background: $field; border: 1px solid $border; border-radius: 9px; padding: 5px 8px;
@@ -101,6 +111,10 @@ QPushButton#herobtn:hover { background: #ffffff; }
 
 QFrame#stat { background: $bg; border: 1px solid $border; border-radius: 16px; }
 QFrame#stat QLabel { background: transparent; }
+QLabel#statcaption { color: $muted; font-size: 8.5pt; letter-spacing: 1px; }
+QProgressBar { background: $selected; border: none; border-radius: 10px; min-height: 20px; max-height: 20px;
+               text-align: center; color: #ffffff; font-weight: 600; }
+QProgressBar::chunk { background: $teal; border-radius: 10px; }
 
 QScrollBar:vertical { background: transparent; width: 12px; margin: 2px; }
 QScrollBar::handle:vertical { background: $border; border-radius: 4px; min-height: 28px; }
@@ -153,7 +167,7 @@ def apply(app, mode: str = "system") -> str:
     """Stellt Stil, Palette und Stylesheet ein. Gibt "light" oder "dark" zurück."""
     kind = effective(mode)
     app.setStyle("Fusion")
-    app.setFont(QFont("Segoe UI", 10))
+    app.setFont(QFont(SANS_FAMILY, 10))
     app.setPalette(palette_for(kind))
     app.setStyleSheet(stylesheet_for(kind))
     app.setProperty("dictum_theme", kind)
@@ -161,4 +175,11 @@ def apply(app, mode: str = "system") -> str:
 
 
 def color(kind: str, name: str) -> str:
+    return COLORS[kind][name]
+
+
+def current(name: str) -> str:
+    """Farbe `name` im gerade aktiven Modus (für Widgets, die selbst malen)."""
+    app = QGuiApplication.instance()
+    kind = (app.property("dictum_theme") if app else None) or "light"
     return COLORS[kind][name]

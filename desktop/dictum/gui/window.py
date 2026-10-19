@@ -30,7 +30,7 @@ import os
 import time
 from datetime import date, datetime
 
-from PySide6.QtCore import QSize, Qt, QTimer
+from PySide6.QtCore import QEvent, QSize, Qt, QTimer
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -737,22 +737,102 @@ class SettingsTab(QWidget):
 
 
 class SettingsDialog(QDialog):
-    """Rahmen um den SettingsTab: ein eigenes Fenster wie in Wispr Flow."""
+    """Rahmen um den SettingsTab: ein eigenes Fenster wie in Wispr Flow, ebenfalls ohne Windows-Titelleiste."""
 
     def __init__(self, parent: QWidget, tab: SettingsTab) -> None:
         super().__init__(parent)
+        self.setObjectName("settings")
         self.setWindowTitle("Einstellungen")
+        self.setWindowFlag(Qt.WindowType.FramelessWindowHint, True)
         self.setMinimumSize(820, 560)
         self.resize(900, 640)
+        bar = _DragBar()
+        row = QHBoxLayout(bar)
+        row.setContentsMargins(6, 0, 0, 0)
+        row.addWidget(_named(QLabel("Einstellungen"), "h2"))
+        row.addStretch(1)
+        self.close_btn = QPushButton()
+        self.close_btn.setObjectName("winclose")
+        self.close_btn.setIconSize(QSize(18, 18))
+        self.close_btn.clicked.connect(self.close)
+        row.addWidget(self.close_btn)
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setContentsMargins(16, 12, 16, 16)
+        layout.addWidget(bar)
         layout.addWidget(tab)
         self.tab = tab
+        self.refresh_icons()
+
+    def refresh_icons(self) -> None:
+        kind = QApplication.instance().property("dictum_theme") or "light"
+        self.close_btn.setIcon(nav_icon("close", theme.color(kind, "muted")))
 
 
 # ======================================================================================
 # Hauptfenster
 # ======================================================================================
+
+class _DragBar(QWidget):
+    """Leerer Streifen, an dem man das Fenster verschiebt (Ersatz für die Titelleiste).
+    Doppelklick vergrößert/verkleinert das Fenster wie gewohnt."""
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802
+        handle = self.window().windowHandle()
+        if event.button() == Qt.MouseButton.LeftButton and handle is not None:
+            handle.startSystemMove()  # Windows übernimmt: inklusive Andocken an den Bildschirmrand
+        super().mousePressEvent(event)
+
+    def mouseDoubleClickEvent(self, event) -> None:  # noqa: N802
+        window = self.window()
+        if event.button() == Qt.MouseButton.LeftButton and hasattr(window, "toggle_maximized"):
+            window.toggle_maximized()
+
+
+class _Root(QWidget):
+    """Grundfläche des Fensters. Ohne Titelleiste fehlt auch der Rahmen zum Größenändern. Deshalb
+    erkennt dieser Rand (die äußeren 8 Pixel) selbst, wo man das Fenster anfasst, und lässt
+    Windows das Ziehen übernehmen (`startSystemResize`)."""
+
+    GRIP = 8
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setMouseTracking(True)
+
+    def _edges(self, pos) -> Qt.Edge:
+        edges = Qt.Edge(0)
+        if pos.x() <= self.GRIP:
+            edges |= Qt.Edge.LeftEdge
+        if pos.x() >= self.width() - self.GRIP:
+            edges |= Qt.Edge.RightEdge
+        if pos.y() <= self.GRIP:
+            edges |= Qt.Edge.TopEdge
+        if pos.y() >= self.height() - self.GRIP:
+            edges |= Qt.Edge.BottomEdge
+        return edges
+
+    def mouseMoveEvent(self, event) -> None:  # noqa: N802
+        edges = Qt.Edge(0) if self.window().isMaximized() else self._edges(event.position().toPoint())
+        left, right, top, bottom = (Qt.Edge.LeftEdge, Qt.Edge.RightEdge, Qt.Edge.TopEdge, Qt.Edge.BottomEdge)
+        if edges in (left | top, right | bottom):
+            self.setCursor(Qt.CursorShape.SizeFDiagCursor)
+        elif edges in (right | top, left | bottom):
+            self.setCursor(Qt.CursorShape.SizeBDiagCursor)
+        elif edges in (left, right):
+            self.setCursor(Qt.CursorShape.SizeHorCursor)
+        elif edges in (top, bottom):
+            self.setCursor(Qt.CursorShape.SizeVerCursor)
+        else:
+            self.unsetCursor()
+        super().mouseMoveEvent(event)
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802
+        handle = self.window().windowHandle()
+        edges = Qt.Edge(0) if self.window().isMaximized() else self._edges(event.position().toPoint())
+        if event.button() == Qt.MouseButton.LeftButton and edges and handle is not None:
+            handle.startSystemResize(edges)
+        super().mousePressEvent(event)
+
 
 class _Page:
     """Eintrag der Seitenleiste: Schlüssel, Beschriftung, Symbol, Überschrift, Inhalt."""
@@ -769,6 +849,9 @@ class MainWindow(QMainWindow):
         self._hinted = False
         self.setWindowTitle("Dictum")
         self.setWindowIcon(mic_icon())
+        # Keine Windows-Titelleiste (die blaue Leiste mit Verkleinern/Vergrößern/Schließen): Die Knöpfe
+        # sitzen stattdessen oben rechts im Fenster, wie bei Wispr Flow. Siehe _DragBar und _Root.
+        self.setWindowFlag(Qt.WindowType.FramelessWindowHint, True)
         self.resize(1120, 780)
         self.setMinimumSize(900, 620)
 
@@ -802,7 +885,7 @@ class MainWindow(QMainWindow):
     # --- Aufbau -----------------------------------------------------------------------
 
     def _build(self) -> None:
-        root = QWidget()
+        root = _Root()
         root.setObjectName("root")
         self.setCentralWidget(root)
         outer = QHBoxLayout(root)
@@ -816,13 +899,18 @@ class MainWindow(QMainWindow):
         side = QVBoxLayout(sidebar)
         side.setContentsMargins(4, 6, 4, 4)
         side.setSpacing(2)
-        brand = QHBoxLayout()
+        brand_bar = _DragBar()
+        brand = QHBoxLayout(brand_bar)
+        brand.setContentsMargins(0, 0, 0, 0)
         logo = QLabel()
         logo.setPixmap(mic_icon().pixmap(28, 28))
+        logo.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         brand.addWidget(logo)
-        brand.addWidget(_named(QLabel("Dictum"), "brand"))
+        name = _named(QLabel("Dictum"), "brand")
+        name.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        brand.addWidget(name)
         brand.addStretch(1)
-        side.addLayout(brand)
+        side.addWidget(brand_bar)
         side.addSpacing(18)
 
         self._nav_group = QButtonGroup(self)
@@ -848,7 +936,10 @@ class MainWindow(QMainWindow):
         # Rechts: Kopfzeile mit Umschalter, darunter die Karte mit der Seite
         right = QVBoxLayout()
         right.setSpacing(8)
-        header = QHBoxLayout()
+        header_bar = _DragBar()
+        header = QHBoxLayout(header_bar)
+        header.setContentsMargins(0, 0, 0, 0)
+        header.setSpacing(2)
         header.addStretch(1)
         self.theme_btn = QPushButton()
         self.theme_btn.setObjectName("iconbtn")
@@ -856,7 +947,19 @@ class MainWindow(QMainWindow):
         self.theme_btn.setToolTip("Hell/Dunkel umschalten")
         self.theme_btn.clicked.connect(self.toggle_theme)
         header.addWidget(self.theme_btn)
-        right.addLayout(header)
+        header.addSpacing(10)
+        self.min_btn, self.max_btn, self.close_btn = QPushButton(), QPushButton(), QPushButton()
+        for button, name, action, tip in (
+            (self.min_btn, "winbtn", self.showMinimized, "Verkleinern"),
+            (self.max_btn, "winbtn", self.toggle_maximized, "Vergrößern"),
+            (self.close_btn, "winclose", self.close, "Schließen (Dictum läuft im Infobereich weiter)"),
+        ):
+            button.setObjectName(name)
+            button.setIconSize(QSize(18, 18))
+            button.setToolTip(tip)
+            button.clicked.connect(action)
+            header.addWidget(button)
+        right.addWidget(header_bar)
 
         card = QFrame()
         card.setObjectName("card")
@@ -887,6 +990,9 @@ class MainWindow(QMainWindow):
             self._nav_buttons[page.key].setIcon(nav_icon(page.icon, text))
         self.settings_btn.setIcon(nav_icon("settings", text))
         self.theme_btn.setIcon(nav_icon("sun" if kind == "dark" else "moon", muted))
+        self.min_btn.setIcon(nav_icon("min", muted))
+        self.max_btn.setIcon(nav_icon("restore" if self.isMaximized() else "max", muted))
+        self.close_btn.setIcon(nav_icon("close", muted))
 
     # --- Navigation -------------------------------------------------------------------
 
@@ -895,6 +1001,7 @@ class MainWindow(QMainWindow):
             if page.key == key:
                 self._nav_buttons[key].setChecked(True)
                 self.stack.setCurrentIndex(index)
+                self.stack.currentWidget().verticalScrollBar().setValue(0)  # jede Seite beginnt oben
                 self.title.setText(page.title)
                 self._on_page_shown(key)
                 return
@@ -923,6 +1030,14 @@ class MainWindow(QMainWindow):
         self.settings_dialog.raise_()
         self.settings_dialog.activateWindow()
 
+    def toggle_maximized(self) -> None:
+        self.showNormal() if self.isMaximized() else self.showMaximized()
+
+    def changeEvent(self, event) -> None:  # noqa: N802
+        if event.type() == QEvent.Type.WindowStateChange and hasattr(self, "max_btn"):
+            self._refresh_icons()  # Symbol wechselt zwischen "vergrößern" und "wiederherstellen"
+        super().changeEvent(event)
+
     # --- Hell/Dunkel ------------------------------------------------------------------
 
     def toggle_theme(self) -> None:
@@ -937,7 +1052,8 @@ class MainWindow(QMainWindow):
         theme.apply(QApplication.instance(), mode)
         self.app.apply_settings(new)
         self._refresh_icons()
-        self.stats_tab.chart.update()
+        self.settings_dialog.refresh_icons()
+        self.stats_tab.repaint_all()
 
     # --- Zeitgeber --------------------------------------------------------------------
 

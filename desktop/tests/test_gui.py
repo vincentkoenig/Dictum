@@ -4,10 +4,12 @@ zeichnet aber auf keinen Bildschirm – so laufen die Tests ohne sichtbare Fenst
 import os
 import shutil
 import time
+from datetime import date, timedelta
 
 os.environ["QT_QPA_PLATFORM"] = "offscreen"  # vor dem ersten Qt-Import setzen
 
 import pytest  # noqa: E402
+from PySide6.QtCore import QPointF, Qt  # noqa: E402
 from PySide6.QtGui import QGuiApplication  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
@@ -508,17 +510,56 @@ def test_leerer_snippet_wird_abgelehnt(app, qapp, tmp_path):
 def test_statistik_tab_zeigt_zahlen(app, qapp):
     from dictum.gui.stats_tab import de, duration_text
 
-    app.history.add("a", "eins zwei drei vier", 6.0, "local", True, False, app="Chrome", cost=0.002)
-    app.history.add("b", "fünf sechs", 3.0, "local", False, False, app="Chrome")
+    app.history.add("a", "eins zwei drei vier", 6.0, "local", True, False, app="Chrome", cost=0.002, group="ai")
+    app.history.add("b", "fünf sechs", 3.0, "local", False, False, app="Outlook", group="mail")
     window = MainWindow(app)
     tab = window.stats_tab
     tab.refresh()
-    assert tab.words.value.text() == "6" and tab.dictations.value.text() == "2"
-    assert tab.wpm.value.text() == "40"                       # 6 Wörter in 9 s
-    assert tab.apps.rowCount() == 1 and tab.apps.item(0, 0).text() == "Chrome"
-    assert tab.chart.days[-1][1] == 6
+    assert tab.words.text() == "6" and "2 Diktate" in tab.words_note.text() and "1 von der KI" in tab.words_note.text()
+    assert round(tab.gauge.value) == 40                       # 6 Wörter in 9 s
+    assert "1,0-mal" in tab.speed_note.text()
+    assert tab.usage_rows["ai"][0].value() == 67 and tab.usage_rows["mail"][0].value() == 33
+    assert tab.usage_rows["ai"][1].text() == "67 % · 1" and tab.usage_rows["code"][1].text() == "–"
+    assert tab.usage_rows["code"][0].value() == 0
+    assert tab.apps.rowCount() == 2 and tab.apps.item(0, 0).text() == "Chrome"
+    assert tab.heatmap.days[date.today()] == 6
+    assert tab.streak.text() == "1 Tag"
     assert de(12345.6) == "12.346" and de(0.5, 2) == "0,50"
     assert duration_text(0.2) == "unter 1 Min." and duration_text(30) == "30 Min." and duration_text(150) == "2,5 Std."
+
+
+def test_heatmap_raster_und_stufen(qapp):
+    from dictum.gui.stats_tab import HEATMAP_WEEKS, Heatmap
+
+    today = date(2026, 10, 19)                                 # ein Montag
+    heat = Heatmap()
+    heat.set_days([(today, 50), (today - timedelta(days=1), 10)], today)
+    grid = heat.grid()
+    assert len(grid) == HEATMAP_WEEKS and all(len(week) == 7 for week in grid)
+    assert grid[-1][0] == (today, 50) and grid[-1][1] is None   # Dienstag danach: noch nicht passiert
+    assert grid[-2][6] == (today - timedelta(days=1), 10)       # Sonntag davor
+    assert Heatmap.level(0, 50) == 0 and Heatmap.level(50, 50) == 4 and 1 <= Heatmap.level(10, 50) <= 2
+
+
+def test_fenster_ist_ohne_titelleiste_mit_eigenen_knoepfen(app, qapp):
+    window = MainWindow(app)
+    assert window.windowFlags() & Qt.WindowType.FramelessWindowHint
+    window.show()
+    window.toggle_maximized()
+    assert window.isMaximized()
+    window.toggle_maximized()
+    assert not window.isMaximized()
+    window.close_btn.click()                                   # versteckt nur, Dictum läuft weiter
+    assert not window.isVisible() and app.tray.messages
+
+
+def test_rand_erkennt_ecken_zum_groessern(app, qapp):
+    window = MainWindow(app)
+    root = window.centralWidget()
+    root.resize(800, 600)
+    assert root._edges(QPointF(2, 2)) == Qt.Edge.LeftEdge | Qt.Edge.TopEdge
+    assert root._edges(QPointF(798, 300)) == Qt.Edge.RightEdge
+    assert root._edges(QPointF(400, 300)) == Qt.Edge(0)
 
 
 def test_statistik_ohne_verlauf(app, qapp):

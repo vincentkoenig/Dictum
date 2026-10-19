@@ -516,7 +516,7 @@ Statt Reitern gibt es jetzt eine **Seitenleiste** und rechts eine weiße **Karte
 |---|---|
 | **Diktat** | Status, Banner „Stile einrichten“, Verlauf mit Suche (Zeit als „Heute 11:07“), rechts Kennzahlen |
 | **Meetings** | Aufnahme starten/beenden, letztes Meeting, Einrichtungs-Check |
-| **Statistik** | Wörter, Tempo, Serie, gespart, Kosten, Tagesdiagramm, Top-Programme |
+| **Statistik** | Tempo-Anzeige, gesparte Zeit, Wörter, Nutzung nach Programmart, Kalender der Serie, Top-Programme (wie „Insights“ bei Wispr Flow) |
 | **Wörterbuch** / **Textbausteine** | die beiden Listen, jetzt getrennt (Lern-Schalter beim Wörterbuch) |
 | **Stile** | Stil je Programmart, eigene Zuordnung, Kontext für die KI |
 | **Notizblock** | Textfeld zum Ausprobieren des Diktats, bleibt gespeichert (`notizblock.txt`) |
@@ -527,6 +527,24 @@ Statt Reitern gibt es jetzt eine **Seitenleiste** und rechts eine weiße **Karte
 Rundungen, Karten und Knöpfe. Die Farben stehen in einer Tabelle je Modus, Umschalten heißt „andere Tabelle
 einsetzen“. Überschriften sind Serifenschrift (Georgia), der Rest Segoe UI. Die Symbole der Seitenleiste sind
 selbst gemalt (`icons.nav_icon`), damit sie nicht von einer Symbolschrift abhängen, die es nicht überall gibt.
+
+**Keine Windows-Titelleiste:** Das Fenster hat keinen Rahmen mehr (`FramelessWindowHint`), also auch keine
+Leiste mit Verkleinern/Vergrößern/Schließen in der Akzentfarbe. Die drei Knöpfe sitzen stattdessen oben rechts im
+Fenster. Drei kleine Bausteine ersetzen, was Windows sonst liefert:
+
+- `_DragBar`: Der leere Streifen oben (und beim Namen „Dictum“) verschiebt das Fenster per `startSystemMove()`,
+  Windows übernimmt dabei auch das Andocken an Bildschirmränder. Doppelklick vergrößert/verkleinert.
+- `_Root`: Die äußeren 8 Pixel erkennen Rand und Ecken, zeigen den passenden Pfeil und lassen Windows per
+  `startSystemResize()` die Größe ändern.
+- Das **X** versteckt nur das Fenster, Dictum läuft im Infobereich weiter (wie bisher). Der Einstellungsdialog
+  hat ebenfalls keine Titelleiste.
+
+**Statistik-Seite:** Tempo als Halbkreis (Skala bis 250 Wörter/Min.) mit „x-mal so schnell wie Tippen“; gesparte
+Zeit; Wörter mit Diktaten, KI-Bereinigungen und Kosten; **Nutzung nach Programmart** (KI-Chats, Programmieren,
+Dokumente, E-Mails, Arbeits- und private Nachrichten, Sonstiges) als Balken; ein **Kalender der letzten 26 Wochen**
+(dunkler = mehr Wörter) mit aktueller und längster Serie. Die Programmart wird beim Diktat gespeichert
+(`History.grp`, `styles.usage_group`) und erkennt auch KI-Chats im Browser am Fenstertitel; ältere Einträge ohne
+Programm zählen nicht mit. Die Felder des Kalenders passen sich der Fensterbreite an.
 
 **Hell/Dunkel:** Der Mond/Sonne-Knopf oben rechts schaltet um und speichert `[ui] theme`. Mögliche Werte:
 `system` (folgt Windows, Standard), `light`, `dark`. Auch unter Einstellungen → Allgemein → Darstellung.

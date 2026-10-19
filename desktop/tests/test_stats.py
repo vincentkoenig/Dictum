@@ -90,3 +90,28 @@ def test_vordergrundfenster_wird_gelesen():
 
     w = active_window()               # im Test läuft irgendein Fenster im Vordergrund oder keins
     assert w is None or isinstance(w.exe, str)
+
+
+def test_nutzungsgruppen():
+    from dictum.context import ActiveWindow
+    from dictum.styles import usage_group
+
+    assert usage_group(ActiveWindow("claude", "Claude")) == "ai"
+    assert usage_group(ActiveWindow("chrome", "ChatGPT - Chrome")) == "ai"
+    assert usage_group(ActiveWindow("code", "main.py")) == "code"
+    assert usage_group(ActiveWindow("outlook", "Posteingang")) == "mail"
+    assert usage_group(ActiveWindow("slack", "x")) == "work"
+    assert usage_group(ActiveWindow("whatsapp", "x")) == "personal"
+    assert usage_group(ActiveWindow("winword", "Dokument1")) == "docs"
+    assert usage_group(ActiveWindow("irgendwas", "x")) == "other"
+    assert usage_group(None) == "other"
+
+
+def test_gruppen_und_bereinigte_in_der_statistik(tmp_path):
+    h = History(tmp_path / "h.db")
+    h.add("r", "eins zwei drei", cleaned=True, group="mail")
+    h.add("r", "eins", cleaned=False, group="mail")
+    h.add("r", "a b c d e", cleaned=True, group="code")
+    s = h.stats(today=TODAY)
+    assert s.cleaned == 2
+    assert s.groups == [("code", 5, 1), ("mail", 4, 2)]

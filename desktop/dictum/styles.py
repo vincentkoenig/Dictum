@@ -62,6 +62,42 @@ CATEGORY_BY_TITLE = (
 )
 
 
+# Gruppen für die Statistik ("Wo diktierst du?"). Gröber als die Stil-Kategorien oben.
+USAGE_GROUPS = {
+    "ai": "KI-Chats und Prompts",
+    "code": "Programmieren",
+    "docs": "Dokumente und Notizen",
+    "mail": "E-Mails",
+    "work": "Arbeitsnachrichten",
+    "personal": "Private Nachrichten",
+    "other": "Sonstiges",
+}
+_AI_EXE = {"claude", "chatgpt", "copilot"}
+_AI_TITLE = ("claude", "chatgpt", "gemini", "copilot", "perplexity")
+_CODE_EXE = {"code", "cursor", "devenv", "pycharm64", "idea64", "rider64", "webstorm64", "windowsterminal",
+             "powershell", "pwsh", "cmd", "wt"}
+_DOC_EXE = {"winword", "onenote", "notepad", "notepad++", "obsidian", "notion", "excel", "powerpnt", "soffice",
+            "acrobat", "acrord32"}
+_STYLE_TO_USAGE = {"email": "mail", "work_chat": "work", "personal_chat": "personal"}
+
+
+def usage_group(window: ActiveWindow | None) -> str:
+    """Zu welcher Gruppe der Statistik gehört das Programm? (KI, Programmieren, Dokumente, Mail, Chats, Sonstiges)"""
+    if window is None:
+        return "other"
+    exe, title = window.exe, window.title.lower()
+    if exe in _AI_EXE or any(word in title for word in _AI_TITLE):
+        return "ai"
+    category = category_for(window)
+    if category in _STYLE_TO_USAGE:
+        return _STYLE_TO_USAGE[category]
+    if exe in _CODE_EXE:
+        return "code"
+    if exe in _DOC_EXE:
+        return "docs"
+    return "other"
+
+
 def category_for(window: ActiveWindow | None) -> str:
     if window is None:
         return "other"

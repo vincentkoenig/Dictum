@@ -83,7 +83,7 @@ def nav_icon(name: str, color: str, size: int = 20) -> QIcon:
         p.drawLine(pt(6, 12.4), pt(14, 3))
         p.drawLine(pt(14, 12.4), pt(6, 3))
     elif name == "style":
-        font = QFont("Georgia", int(11 * s))
+        font = QFont("Sitka Display", int(11 * s))
         font.setBold(True)
         p.setFont(font)
         p.drawText(r(0, 0, 20, 20), Qt.AlignmentFlag.AlignCenter, "Aa")
@@ -98,6 +98,17 @@ def nav_icon(name: str, color: str, size: int = 20) -> QIcon:
             p.setBrush(pen.color())
             p.drawEllipse(pt(knob, y), 1.8 * s, 1.8 * s)
             p.setBrush(Qt.BrushStyle.NoBrush)
+    elif name == "min":
+        p.drawLine(pt(5, 10), pt(15, 10))
+    elif name == "max":
+        p.drawRoundedRect(r(5, 5, 10, 10), 1.5 * s, 1.5 * s)
+    elif name == "restore":
+        p.drawRoundedRect(r(4.5, 7, 8.5, 8.5), 1.5 * s, 1.5 * s)
+        p.drawLine(pt(7, 4.5), pt(15.5, 4.5))
+        p.drawLine(pt(15.5, 4.5), pt(15.5, 13))
+    elif name == "close":
+        p.drawLine(pt(5.5, 5.5), pt(14.5, 14.5))
+        p.drawLine(pt(14.5, 5.5), pt(5.5, 14.5))
     elif name == "moon":
         path = QPainterPath()
         path.addEllipse(r(4, 4, 12, 12))

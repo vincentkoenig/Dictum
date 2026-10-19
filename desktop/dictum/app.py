@@ -522,7 +522,8 @@ class DictumApp:
                 raw=raw, text=text,
             )
             self.history.add(raw, text, duration, self.engine, cleaned, snippet,
-                             app=target.app if target else "", cost=cost)
+                             app=target.app if target else "", cost=cost,
+                             group=styles.usage_group(target))
         except Exception:
             log.exception("Verlauf konnte nicht gespeichert werden")
 
