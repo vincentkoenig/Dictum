@@ -8,8 +8,8 @@ Warum nicht Buchstabe für Buchstabe tippen? Das wäre langsam, manche Programme
 verschlucken Zeichen, und Umlaute/Emojis machen je nach Tastaturlayout Probleme.
 Einfügen ist sofort da und funktioniert praktisch überall.
 
-Einschränkung: Wiederhergestellt wird nur Text. War vorher z. B. ein Bild in der
-Zwischenablage, ist es danach weg.
+Die vorherige Zwischenablage wird mit **allen Formaten** gesichert (Bilder, formatierter Text, kopierte
+Dateien) und zurückgelegt, siehe clipboard.py.
 """
 
 from __future__ import annotations
@@ -18,8 +18,9 @@ import logging
 import time
 import uuid
 
-import pyperclip
 from pynput import keyboard
+
+from . import clipboard
 
 log = logging.getLogger(__name__)
 
@@ -35,15 +36,14 @@ def copy_selection(timeout: float = 0.6) -> str:
 
     Dafür wird Strg+C "gedrückt". Damit man erkennt, ob wirklich etwas kopiert wurde, steht vorher ein
     Platzhalter in der Zwischenablage: Ist er danach noch da, gab es keine Markierung. Die vorherige
-    Zwischenablage kommt anschließend zurück (nur Text, siehe oben).
+    Zwischenablage kommt anschließend vollständig zurück.
     """
-    try:
-        previous = pyperclip.paste()
-    except pyperclip.PyperclipException:
-        previous = None
-
+    previous = clipboard.snapshot()
     sentinel = f"__dictum_{uuid.uuid4().hex}__"
-    pyperclip.copy(sentinel)
+    try:
+        clipboard.set_text(sentinel)
+    except clipboard.ClipboardBusy:
+        return ""
     time.sleep(_BEFORE_PASTE)
     with _controller.pressed(keyboard.Key.ctrl):
         _controller.tap("c")
@@ -52,32 +52,28 @@ def copy_selection(timeout: float = 0.6) -> str:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         time.sleep(0.03)
-        try:
-            current = pyperclip.paste()
-        except pyperclip.PyperclipException:
-            continue
-        if current != sentinel:
+        current = clipboard.get_text()
+        if current is not None and current != sentinel:
             selection = current
             break
 
-    pyperclip.copy(previous if previous is not None else "")
+    clipboard.restore(previous)
     return selection
 
 
 def insert_text(text: str) -> None:
     if not text:
         return
+    previous = clipboard.snapshot()
     try:
-        previous = pyperclip.paste()
-    except pyperclip.PyperclipException:
-        previous = None
-
-    pyperclip.copy(text)
+        clipboard.set_text(text)
+    except clipboard.ClipboardBusy:
+        log.warning("Zwischenablage belegt – Text nicht eingefügt")
+        return
     time.sleep(_BEFORE_PASTE)
     with _controller.pressed(keyboard.Key.ctrl):
         _controller.tap("v")
     time.sleep(_AFTER_PASTE)
 
-    if previous:
-        pyperclip.copy(previous)
+    clipboard.restore(previous)
     log.debug("Eingefügt: %d Zeichen", len(text))

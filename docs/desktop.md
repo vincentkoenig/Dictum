@@ -53,6 +53,7 @@ egal ob Word, Browser, Outlook oder Slack. Dieses Dokument erklärt, wie das fun
 | `hotkey.py` | Halten/Antippen erkennen | Zustandsmaschine, getrennt von der Tastatur |
 | `gui/hotkey_field.py` | „Taste wählen“ | Dialog: Taste drücken statt aus einer Liste wählen |
 | `inserter.py` | Text einfügen | Zwischenablage + simuliertes Strg+V |
+| `clipboard.py` | Zwischenablage | alle Formate sichern/zurücklegen, Diktat nicht im Win+V-Verlauf |
 | `gui/overlay.py` | Statusanzeige | Fenster, das nie den Fokus nimmt |
 | `gui/tray.py` | Symbol im Infobereich | Menü wird vor dem Aufklappen synchronisiert |
 | `gui/window.py` | Dictum-Fenster | Reiter Start, Verlauf, Einstellungen, Info |
@@ -653,7 +654,7 @@ Vorlese-Programme Fenster lesen. Datenschutz:
 
 ### Allgemein
 
-- Die Zwischenablage wird nur wiederhergestellt, wenn sie vorher **Text** enthielt.
+- Die Zwischenablage kommt nach dem Einfügen **mit allen Formaten** zurück (Bild, formatierter Text, kopierte Dateien). Nur reine Windows-Handles ohne Speicherblock (`CF_BITMAP` & Co.) bleiben außen vor; zu Bildern liegt immer auch `CF_DIB` bereit.
 - In Programmen, die mit Administratorrechten laufen, kann Windows das simulierte Strg+V
   blockieren.
 - Einstellungen aus dem **Tray-Menü** gelten nur bis zum Beenden. Dauerhaft speichert man sie im Reiter
