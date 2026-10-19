@@ -38,7 +38,7 @@ import pyperclip
 from PySide6.QtCore import QObject, QTimer, Signal
 from PySide6.QtWidgets import QApplication
 
-from . import autostart, context, costs, shortcuts, styles
+from . import autostart, commands, context, costs, shortcuts, styles
 from .audio import Recorder, duration_seconds
 from .cleanup import clean_text
 from .cloud_transcriber import OpenAITranscriber
@@ -49,7 +49,7 @@ from .gui.tray import Tray
 from .gui.window import MainWindow
 from .history import History
 from .hotkey import HotkeyListener, HotkeyStateMachine, hotkey_label
-from .inserter import insert_text
+from .inserter import copy_selection, insert_text
 from .llm import LLMError, create_provider
 from .logsetup import LOG_PATH
 from .meeting_controller import MeetingController
@@ -109,6 +109,16 @@ class DictumApp:
             hold_threshold=settings.hotkey.hold_threshold,
         )
         self.listener = HotkeyListener(settings.hotkey.keys, self.machine)
+        # Command Mode: eigene Zustandsmaschine mit denselben Regeln (Halten/Antippen, Esc)
+        self.command_machine = HotkeyStateMachine(
+            on_start=self._command_start,
+            on_stop=self._command_stop,
+            on_cancel=self._cancel,
+            mode=settings.hotkey.mode,
+            hold_threshold=settings.hotkey.hold_threshold,
+        )
+        self._command_mode = False  # läuft gerade eine Befehls-Aufnahme?
+        self.listener.add_machine("command", settings.hotkey.command, self.command_machine)
         self._last_text = ""  # zuletzt eingefügter Text (für "erneut einfügen" / "kopieren")
         self._set_extra_hotkeys(settings.hotkey)
         # Meetings: braucht notify/refresh vom Tray – das Tray braucht die Meetings fürs
@@ -196,7 +206,7 @@ class DictumApp:
 
     def set(self, setting: str, value) -> None:
         if setting == "mode":
-            self.machine.mode = value
+            self.machine.mode = self.command_machine.mode = value
         elif setting == "language":
             self.local.language = self.cloud.language = value
         elif setting == "engine":
@@ -227,8 +237,9 @@ class DictumApp:
         self._set_extra_hotkeys(new.hotkey)
         self.hotkey_text = hotkey_label(new.hotkey.keys)
         self.tray.set_hotkey_label(self.hotkey_text)
-        self.machine.mode = new.hotkey.mode
-        self.machine.hold_threshold = new.hotkey.hold_threshold
+        self.machine.mode = self.command_machine.mode = new.hotkey.mode
+        self.machine.hold_threshold = self.command_machine.hold_threshold = new.hotkey.hold_threshold
+        self.listener.add_machine("command", new.hotkey.command, self.command_machine)
         self.local.language = self.cloud.language = new.transcription.language
         self.local.fallback_language = new.transcription.fallback_language
         self.engine = new.transcription.engine
@@ -331,9 +342,23 @@ class DictumApp:
         self._beep(660)
         ready = self.engine == "openai" or self.local.is_ready
         self.overlay.show("transcribing" if ready else "loading")
-        self._jobs.put((audio, self._target))
+        self._jobs.put((audio, self._target, self._command_mode))
+        self._command_mode = False
+
+    def _command_start(self) -> None:
+        """Command-Taste gedrückt: Es wird die Anweisung aufgenommen, nicht ein Diktat."""
+        self._command_mode = True
+        self._start()
+        if self.recorder.is_recording:
+            self.overlay.show("command")
+        else:
+            self._command_mode = False
+
+    def _command_stop(self) -> None:
+        self._stop()
 
     def _cancel(self) -> None:
+        self._command_mode = False
         self.recorder.stop()
         self.overlay.hide()
         log.debug("Aufnahme verworfen (andere Taste oder Esc)")
@@ -358,7 +383,11 @@ class DictumApp:
                 log.exception("Fehler bei der Verarbeitung")
                 self.overlay.flash("Fehler – siehe Logdatei")
 
-    def _process(self, audio: np.ndarray, target: context.ActiveWindow | None = None) -> None:
+    def _process(self, audio: np.ndarray, target: context.ActiveWindow | None = None,
+                 command: bool = False) -> None:
+        if command:
+            self._process_command(audio, target)
+            return
         # Wörterbuch und Snippets bei jedem Diktat frisch lesen – so wirken Änderungen
         # an den Dateien sofort, ohne Neustart (die Dateien sind winzig)
         dictionary = load_dictionary()
@@ -390,6 +419,26 @@ class DictumApp:
         self._last_text = text
         insert_text(text)
         self._remember(raw, text, audio, cleaned, snippet is not None, target)
+
+    def _process_command(self, audio: np.ndarray, target: context.ActiveWindow | None) -> None:
+        """Command Mode: Anweisung erkennen, markierten Text holen, KI anwenden, Ergebnis einfügen."""
+        dictionary = load_dictionary()
+        instruction = self._transcribe(audio, dictionary)
+        if not instruction:
+            self.overlay.flash("Keine Anweisung erkannt")
+            return
+        selection = copy_selection()
+        self.overlay.show("command_working")
+        try:
+            result = commands.run_command(instruction, selection, self.provider, dictionary)
+        except commands.CommandError as error:
+            self.overlay.flash(str(error), seconds=3)
+            return
+        log.info("Command Mode: %r auf %d Zeichen → %d Zeichen", instruction, len(selection), len(result))
+        self.overlay.hide()
+        self._last_text = result
+        insert_text(result)  # ersetzt die Markierung (oder landet an der Schreibstelle)
+        self._remember(instruction, result, audio, True, False, target)
 
     def _context_for(self, target: context.ActiveWindow | None) -> str:
         """Was die KI über die Umgebung erfahren darf (siehe [context] in settings.toml)."""

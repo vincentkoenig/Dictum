@@ -23,6 +23,12 @@ mode = "both"
 # Ab wie vielen Sekunden Drücken gilt es als "Halten" statt "Antippen"
 hold_threshold = 0.4
 
+# Command Mode ([] = aus): Text markieren, diese Taste halten (oder antippen), eine Anweisung sprechen
+# ("mach das kürzer", "übersetze ins Englische"). Das Ergebnis ersetzt die Markierung, Strg+Z macht es
+# rückgängig. Ohne Markierung schreibt die KI einen neuen Text nach deiner Anweisung. Braucht die KI-Bereinigung
+# (Claude oder OpenAI) mit gültigem Key. Keine Kombination darf in einer anderen enthalten sein.
+command = ["f9"]
+
 # Zusatz-Tasten wie bei Wispr Flow ([] = aus):
 # Das letzte Diktat noch einmal einfügen bzw. nur in die Zwischenablage kopieren.
 # Esc bricht eine laufende Aufnahme jederzeit ab (fest eingebaut).

@@ -26,6 +26,8 @@ STATES = {
     "listening": ("●", "#ff4d4f", "Hört zu …"),
     "transcribing": ("◐", "#4c9ffe", "Transkribiert …"),
     "polishing": ("✦", "#b48cff", "Formuliert …"),
+    "command": ("●", "#b48cff", "Befehl – sprich …"),
+    "command_working": ("✦", "#b48cff", "Setze um …"),
 }
 FLASH_ICON = ("ⓘ", "#f5a623")
 

@@ -63,6 +63,7 @@ egal ob Word, Browser, Outlook oder Slack. Dieses Dokument erklärt, wie das fun
 | `gui/dictionary_tab.py` | Reiter Wörterbuch | Wörter und Snippets bearbeiten, sofort gespeichert |
 | `styles.py` | Stile pro Programm | Programm → Kategorie → Stil, Anweisung an die KI |
 | `gui/styles_tab.py` | Reiter Stile | Stil je Kategorie, eigene Zuordnung, Kontext-Haken |
+| `commands.py` | Command Mode | Anweisung + markierter Text → KI → Ergebnis |
 | `history.py` | Lokaler Verlauf | SQLite-Datei, nur auf diesem PC |
 | `settings_io.py` | Einstellungen speichern | tomlkit erhält die Kommentare |
 | `app.py` | Verbindet alles | Threads, Signale, Warteschlange |
@@ -526,6 +527,38 @@ Das **Programm** merkt sich `context.active_window()` beim Start der Aufnahme: V
 Prozess → Name. Programme mit Administratorrechten verweigern den Namen, dann bleibt er leer. Der Name
 steht nur im lokalen Verlauf. Ältere Datenbanken bekommen die neuen Spalten `app` und `cost` beim Öffnen
 nachgerüstet (`MIGRATIONS`), alte Einträge haben dann kein Programm.
+
+### Command Mode: Text per Sprache umschreiben (`commands.py`)
+
+**Bedienung:** Text markieren, die Befehls-Taste (Standard **F9**, frei wählbar) halten oder antippen, eine
+Anweisung sprechen („mach das kürzer“, „übersetze ins Englische“, „formuliere freundlicher“), loslassen. Das
+Ergebnis ersetzt die Markierung, **Strg+Z macht es rückgängig**, **Esc** bricht die Aufnahme ab. Ohne
+Markierung schreibt die KI einen neuen Text nach der Anweisung („schreib eine kurze Absage für morgen“).
+
+```
+F9 gedrückt ─► Aufnahme (Overlay "Befehl – sprich …")  ─► Anweisung erkannt (wie beim Diktat)
+   ─► Strg+C: markierten Text holen (copy_selection) ─► KI: Anweisung auf Text anwenden
+   ─► Strg+V: Ergebnis ersetzt die Markierung (insert_text) ─► Verlauf
+```
+
+Die Teile im Einzelnen:
+
+- **Zweite Zustandsmaschine.** Der Command Mode benutzt dieselbe Logik wie das Diktat (Halten/Antippen/Esc),
+  nur mit eigener Taste. `HotkeyListener` verwaltet jetzt mehrere solcher Maschinen (`add_machine`).
+- **Markierten Text holen** (`inserter.copy_selection`): Dictum legt einen Platzhalter in die Zwischenablage,
+  „drückt“ Strg+C und wartet, bis der Platzhalter verschwindet. Bleibt er stehen, war nichts markiert. Die
+  vorherige Zwischenablage kommt danach zurück.
+- **Sicherheit:** Markierter Text und Anweisung stehen in eigenen Tags und gelten als Daten. Steht im Text
+  „ignoriere alles“, wird das nicht befolgt. Das Schließ-Tag wird herausgefiltert, damit ein Text nicht aus dem
+  Block ausbrechen kann.
+- **Fehler lassen den Text in Ruhe:** Ist die KI nicht erreichbar oder liefert sie nichts, wird nichts
+  eingefügt, die Markierung bleibt unverändert, und das Overlay sagt es.
+- **Tasten dürfen sich nicht überlappen:** Eine Kombination darf nicht in einer anderen stecken (sonst würde
+  „Strg rechts“ schon das Diktat starten, bevor man „Strg rechts + F9“ fertig gedrückt hat). Das prüft
+  `config._validate` beim Speichern.
+
+Braucht die KI-Bereinigung-Einstellungen (Claude oder OpenAI, mit gültigem Key); dasselbe Modell wie die
+Bereinigung. Ausschalten: Befehls-Taste auf „Aus“.
 
 ### Stile pro Programm und Kontext (`styles.py`, `context.py`)
 

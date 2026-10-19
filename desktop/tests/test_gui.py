@@ -260,14 +260,14 @@ def test_einstellungen_laden_und_speichern(app, qapp, tmp_path):
     assert tab.cleanup.isChecked() and tab.language.currentData() == "de"
 
     tab.language.setCurrentIndex(tab.language.findData("en"))
-    tab.hotkey.set_keys(["f9"])
+    tab.hotkey.set_keys(["f10"])
     tab.copy_last.set_keys([])
     tab.model.setCurrentIndex(tab.model.findData("base"))
     tab.keep_days.setValue(30)
     assert tab.save(path=path) is True
 
     saved = load_settings(path)
-    assert saved.transcription.language == "en" and saved.hotkey.keys == ["f9"] and saved.history.keep_days == 30
+    assert saved.transcription.language == "en" and saved.hotkey.keys == ["f10"] and saved.history.keep_days == 30
     assert saved.hotkey.copy_last == [] and saved.hotkey.paste_last == ["shift", "alt", "z"]
     assert app.applied and "Neustart" in tab.message.text() and "das lokale Modell" in tab.message.text()
     assert ("autostart", False) in app.set_calls

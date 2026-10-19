@@ -22,11 +22,11 @@ def test_werte_werden_geschrieben_und_wieder_gelesen(copy):
 
 def test_kommentare_bleiben_erhalten(copy):
     before = copy.read_text(encoding="utf-8")
-    save_settings({"hotkey": {"keys": ["f9"]}}, copy)
+    save_settings({"hotkey": {"keys": ["f10"]}}, copy)
     after = copy.read_text(encoding="utf-8")
     assert "# Taste(n), die gedrückt werden." in after
     assert after.count("#") == before.count("#")  # kein Kommentar verloren
-    assert load_settings(copy).hotkey.keys == ["f9"]
+    assert load_settings(copy).hotkey.keys == ["f10"]
 
 
 def test_ungueltiger_wert_wird_abgelehnt_und_datei_bleibt_unberuehrt(copy):

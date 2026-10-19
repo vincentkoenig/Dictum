@@ -14,7 +14,7 @@ der Anbieter (Stand Oktober 2026, siehe unten).
 | Hotkey halten oder antippen, **jede Taste frei wählbar** (auch Kombinationen, Maustasten), Esc bricht ab, letztes Diktat erneut einfügen/kopieren | ✅ | Phase 8; Doppeltipp als Freihand-Modus: 🔨 8 |
 | Eigenes Wörterbuch und Snippets (Editor im Fenster), Abgleich mit dem Handy | ✅ | Phase 2, 5, 8 |
 | Fenster, Verlauf mit Suche, Tagesstatistik | ✅ | Phase 6 |
-| **Command Mode**: Text markieren, Befehl sprechen („kürzer“); ohne Markierung Text erzeugen; Esc bricht ab, Strg+Z macht rückgängig | 🔨 8 | eigener Hotkey |
+| **Command Mode**: Text markieren, Befehl sprechen („kürzer“); ohne Markierung Text erzeugen; Esc bricht ab, Strg+Z macht rückgängig | ✅ | Phase 8, Standard-Taste F9 |
 | Stile pro App (formell/locker) und Kontext (Namen aus Fenster und Textfeld) | ✅ | Phase 8, Feldtext nur auf Wunsch |
 | Flüstermodus | 🔨 8 | automatische Pegelanhebung |
 | Wörterbuch lernt aus deinen Korrekturen, Branchenlisten | 🔨 8 | ein gemeinsames Wörterbuch |

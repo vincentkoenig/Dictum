@@ -11,8 +11,8 @@ def test_mitgelieferte_settings_sind_gueltig():
 
 def test_einzeltasten_und_funktionstasten_sind_erlaubt(tmp_path):
     f = tmp_path / "s.toml"
-    f.write_text('[hotkey]\nkeys = ["f9"]\n', encoding="utf-8")
-    assert load_settings(f).hotkey.keys == ["f9"]
+    f.write_text('[hotkey]\nkeys = ["f10"]\n', encoding="utf-8")
+    assert load_settings(f).hotkey.keys == ["f10"]
 
 
 def test_fehlende_datei_ergibt_standardwerte(tmp_path):

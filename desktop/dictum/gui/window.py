@@ -302,6 +302,7 @@ class SettingsTab(QWidget):
 
         hk = app.settings.hotkey
         self.hotkey = HotkeyField(app, hk.keys)
+        self.command = HotkeyField(app, hk.command, optional=True)
         self.paste_last = HotkeyField(app, hk.paste_last, optional=True)
         self.copy_last = HotkeyField(app, hk.copy_last, optional=True)
         self.mode = QComboBox()
@@ -352,6 +353,7 @@ class SettingsTab(QWidget):
         form.addRow("KI-Anbieter:", self.provider)
         form.addRow("OpenAI-Modell (Bereinigung):", self.openai_cleanup)
         form.addRow(self.sounds)
+        form.addRow("Befehls-Taste (Text umschreiben):", self.command)
         form.addRow("Letztes Diktat einfügen:", self.paste_last)
         form.addRow("Letztes Diktat kopieren:", self.copy_last)
 
@@ -405,6 +407,7 @@ class SettingsTab(QWidget):
         wurde (Sprache, Modus …), kommt aus dem laufenden Zustand der App."""
         s, app = self.app.settings, self.app
         self.hotkey.set_keys(s.hotkey.keys)
+        self.command.set_keys(s.hotkey.command)
         self.paste_last.set_keys(s.hotkey.paste_last)
         self.copy_last.set_keys(s.hotkey.copy_last)
         _select(self.mode, app.get("mode"))
@@ -445,7 +448,8 @@ class SettingsTab(QWidget):
         return {
             "hotkey": {
                 "keys": self.hotkey.keys, "mode": self.mode.currentData(),
-                "paste_last": self.paste_last.keys, "copy_last": self.copy_last.keys,
+                "command": self.command.keys, "paste_last": self.paste_last.keys,
+                "copy_last": self.copy_last.keys,
             },
             "transcription": {
                 "language": self.language.currentData(),

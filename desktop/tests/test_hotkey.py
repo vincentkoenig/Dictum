@@ -188,3 +188,40 @@ def test_maustaste_als_hotkey():
     listener._on_click(0, 0, mouse.Button.x1, False)
     listener._on_click(0, 0, mouse.Button.left, True)  # normale Klicks stören nicht
     assert ev == ["start"]
+
+
+def test_zweite_zustandsmaschine_fuer_den_command_mode():
+    sm, ev = make()
+    cmd, cev = make()
+    listener = HotkeyListener(["ctrl_r"], sm)
+    listener.add_machine("command", ["f9"], cmd)
+
+    listener._on_press(Key.f9)
+    assert cev == ["start"] and ev == []          # Diktat bleibt unberührt
+    listener._on_release(Key.f9)                  # angetippt → Aufnahme läuft weiter
+    listener._on_press(Key.f9)
+    assert cev == ["start", "stop"]
+    listener._on_release(Key.f9)
+
+    listener._on_press(Key.ctrl_r)
+    assert ev == ["start"] and cev == ["start", "stop"]
+
+
+def test_esc_bricht_auch_den_command_mode_ab():
+    sm, _ = make()
+    cmd, cev = make()
+    listener = HotkeyListener(["ctrl_r"], sm)
+    listener.add_machine("command", ["f9"], cmd)
+    listener._on_press(Key.f9)
+    listener._on_press(Key.esc)
+    assert cev == ["start", "cancel"]
+
+
+def test_command_mode_ausschalten():
+    sm, _ = make()
+    cmd, cev = make()
+    listener = HotkeyListener(["ctrl_r"], sm)
+    listener.add_machine("command", ["f9"], cmd)
+    listener.add_machine("command", [], cmd)
+    listener._on_press(Key.f9)
+    assert cev == []

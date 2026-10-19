@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 import time
+import uuid
 
 import pyperclip
 from pynput import keyboard
@@ -27,6 +28,40 @@ _BEFORE_PASTE = 0.05
 _AFTER_PASTE = 0.3
 
 _controller = keyboard.Controller()
+
+
+def copy_selection(timeout: float = 0.6) -> str:
+    """Den markierten Text des aktiven Programms holen ("" = nichts markiert).
+
+    Dafür wird Strg+C "gedrückt". Damit man erkennt, ob wirklich etwas kopiert wurde, steht vorher ein
+    Platzhalter in der Zwischenablage: Ist er danach noch da, gab es keine Markierung. Die vorherige
+    Zwischenablage kommt anschließend zurück (nur Text, siehe oben).
+    """
+    try:
+        previous = pyperclip.paste()
+    except pyperclip.PyperclipException:
+        previous = None
+
+    sentinel = f"__dictum_{uuid.uuid4().hex}__"
+    pyperclip.copy(sentinel)
+    time.sleep(_BEFORE_PASTE)
+    with _controller.pressed(keyboard.Key.ctrl):
+        _controller.tap("c")
+
+    selection = ""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        time.sleep(0.03)
+        try:
+            current = pyperclip.paste()
+        except pyperclip.PyperclipException:
+            continue
+        if current != sentinel:
+            selection = current
+            break
+
+    pyperclip.copy(previous if previous is not None else "")
+    return selection
 
 
 def insert_text(text: str) -> None:

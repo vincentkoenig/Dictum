@@ -34,6 +34,7 @@ class HotkeySettings:
     mode: str = "both"
     hold_threshold: float = 0.4
     # Zusatz-Tasten wie bei Wispr Flow (leere Liste = aus): letztes Diktat erneut einfügen / kopieren
+    command: list[str] = field(default_factory=lambda: ["f9"])   # Command Mode, [] = aus
     paste_last: list[str] = field(default_factory=lambda: ["shift", "alt", "z"])
     copy_last: list[str] = field(default_factory=lambda: ["shift", "alt", "x"])
 
@@ -140,14 +141,18 @@ def _validate(settings: Settings) -> None:
     """Prüft früh auf ungültige Werte – lieber eine klare Fehlermeldung beim Start
     als ein rätselhafter Fehler mitten im Diktat."""
     hk = settings.hotkey
-    for name, keys, optional in (("keys", hk.keys, False), ("paste_last", hk.paste_last, True),
-                                 ("copy_last", hk.copy_last, True)):
+    for name, keys, optional in (("keys", hk.keys, False), ("command", hk.command, True),
+                                 ("paste_last", hk.paste_last, True), ("copy_last", hk.copy_last, True)):
         problem = check_hotkey(keys, allow_empty=optional)
         if problem:
             raise ValueError(f"hotkey.{name}: {problem}")
-    chosen = [tuple(sorted(k)) for k in (hk.keys, hk.paste_last, hk.copy_last) if k]
-    if len(chosen) != len(set(chosen)):
-        raise ValueError("Jede Tastenkombination darf nur einmal vergeben werden.")
+    chosen = [set(k) for k in (hk.keys, hk.command, hk.paste_last, hk.copy_last) if k]
+    for index, first in enumerate(chosen):
+        for second in chosen[index + 1:]:
+            if first <= second or second <= first:
+                # Gleiche oder ineinander enthaltene Kombinationen (z. B. Strg rechts und Strg rechts + F9)
+                # lösen sich gegenseitig aus: Beim Drücken von Strg würde schon das Diktat starten
+                raise ValueError("Keine Tastenkombination darf in einer anderen enthalten sein.")
     if hk.mode not in VALID_MODES:
         raise ValueError(f"Ungültiger Modus '{hk.mode}'. Erlaubt: {VALID_MODES}")
     from .styles import STYLES  # erst hier: styles.py importiert context.py (Windows-Bibliotheken)

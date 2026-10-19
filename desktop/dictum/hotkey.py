@@ -146,27 +146,43 @@ class _Combo:
 class HotkeyListener:
     """Hört systemweit auf Tastatur und (bei Bedarf) Maustasten.
 
-    Das Diktat-Hotkey läuft über die Zustandsmaschine. Weitere Kombinationen (z. B. "letztes
-    Diktat einfügen") sind einfache Auslöser: Sobald die Kombination komplett gedrückt ist,
-    wird ihre Funktion einmal aufgerufen. Tasten lassen sich zur Laufzeit austauschen
-    (`set_keys`, `set_trigger`) – ein Neustart ist dafür nicht nötig.
+    Es gibt zwei Arten von Kombinationen:
+
+    * **Zustandsmaschinen** (`add_machine`): Halten/Antippen mit Start und Stopp. Das Diktat ist
+      eine, der Command Mode (Text per Sprache umschreiben) eine zweite.
+    * **Auslöser** (`set_trigger`): Sobald die Kombination komplett gedrückt ist, wird ihre Funktion
+      einmal aufgerufen (z. B. "letztes Diktat einfügen").
+
+    Tasten lassen sich zur Laufzeit austauschen (`set_keys`, `set_trigger`), ein Neustart ist nicht nötig.
     """
 
     def __init__(self, keys: list[str], machine: HotkeyStateMachine) -> None:
         self.machine = machine
-        self._main = _Combo(keys, lambda: machine.combo_down(time.monotonic()),
-                            lambda: machine.combo_up(time.monotonic()))
+        self._machines: dict[str, tuple[_Combo, HotkeyStateMachine]] = {}
+        self._add("dictation", keys, machine)
         self._triggers: dict[str, _Combo] = {}
         self._controller = keyboard.Controller()
         self._keyboard = keyboard.Listener(on_press=self._on_press, on_release=self._on_release)
         self._mouse: mouse.Listener | None = None
         self.enabled = True
 
+    def _add(self, machine_id: str, keys: list[str], machine: HotkeyStateMachine) -> None:
+        combo = _Combo(keys, lambda: machine.combo_down(time.monotonic()),
+                       lambda: machine.combo_up(time.monotonic()))
+        self._machines[machine_id] = (combo, machine)
+
+    @property
+    def _main(self) -> _Combo:
+        return self._machines["dictation"][0]
+
+    def _all_combos(self) -> list[_Combo]:
+        return [c for c, _m in self._machines.values()] + list(self._triggers.values())
+
     def set_enabled(self, enabled: bool) -> None:
         """Pausieren (z. B. während der Dialog "Taste wählen" offen ist). Beim Wechsel wird
         gemerkt Gedrücktes vergessen, damit nach der Pause nichts hängen bleibt."""
         self.enabled = enabled
-        for combo in [self._main, *self._triggers.values()]:
+        for combo in self._all_combos():
             combo.down.clear()
             combo.active = False
 
@@ -185,7 +201,15 @@ class HotkeyListener:
 
     def set_keys(self, keys: list[str]) -> None:
         """Neue Diktat-Taste ab sofort."""
-        self._main = _Combo(keys, self._main.on_down, self._main.on_up)
+        self._add("dictation", keys, self.machine)
+        self._sync_mouse()
+
+    def add_machine(self, machine_id: str, keys: list[str], machine: HotkeyStateMachine) -> None:
+        """Eine weitere Halten/Antippen-Kombination anlegen oder ändern. Leere Liste = ausschalten."""
+        if keys:
+            self._add(machine_id, keys, machine)
+        else:
+            self._machines.pop(machine_id, None)
         self._sync_mouse()
 
     def set_trigger(self, trigger_id: str, keys: list[str], callback: Callable[[], None]) -> None:
@@ -216,12 +240,14 @@ class HotkeyListener:
         if name == _MASK_NAME or not self.enabled:
             return  # unser eigener Trick-Tastendruck bzw. pausiert
         if name == "esc":
-            self.machine.escape()
+            for _combo, machine in list(self._machines.values()):
+                machine.escape()
         for combo in list(self._triggers.values()):
             self._combo_press(combo, name)
-        if not self._combo_press(self._main, name):
-            # Eine "fremde" Taste: Teil einer anderen Tastenkombination
-            self.machine.other_key()
+        for combo, machine in list(self._machines.values()):
+            if not self._combo_press(combo, name):
+                # Eine "fremde" Taste: Teil einer anderen Tastenkombination
+                machine.other_key()
 
     def _combo_press(self, combo: _Combo, name: str | None) -> bool:
         configured = combo.match(name) if name else None
@@ -240,7 +266,7 @@ class HotkeyListener:
     def _release(self, name: str | None) -> None:
         if not name or not self.enabled:
             return
-        for combo in [self._main, *self._triggers.values()]:
+        for combo in self._all_combos():
             configured = combo.match(name)
             if configured is None:
                 continue
@@ -255,7 +281,7 @@ class HotkeyListener:
     def _sync_mouse(self) -> None:
         """Den Maus-Hook nur laufen lassen, wenn eine Maustaste belegt ist: Ein globaler
         Maus-Hook bremst sonst ohne Grund jede Mausbewegung ein wenig."""
-        needed = self._main.uses_mouse or any(c.uses_mouse for c in self._triggers.values())
+        needed = any(c.uses_mouse for c in self._all_combos())
         running = self._mouse is not None
         if needed and not running and self._keyboard.running:
             self._mouse = mouse.Listener(on_click=self._on_click)
