@@ -43,6 +43,7 @@ from ..config import DEFAULT_PATH, DESKTOP_DIR, REPO_ROOT
 from ..history import DB_PATH
 from ..logsetup import LOG_PATH
 from ..settings_io import save_settings
+from .dictionary_tab import DictionaryTab
 from .hotkey_field import HotkeyField
 from .icons import mic_icon
 from .labels import (
@@ -541,11 +542,13 @@ class MainWindow(QMainWindow):
 
         self.start_tab = StartTab(app)
         self.history_tab = HistoryTab(app)
+        self.dictionary_tab = DictionaryTab(app)
         self.settings_tab = SettingsTab(app)
         self.info_tab = InfoTab(app)
         self.tabs = QTabWidget()
         self.tabs.addTab(self.start_tab, "Start")
         self.tabs.addTab(self.history_tab, "Verlauf")
+        self.tabs.addTab(self.dictionary_tab, "Wörterbuch")
         self.tabs.addTab(self.settings_tab, "Einstellungen")
         self.tabs.addTab(self.info_tab, "Info")
         self.tabs.currentChanged.connect(self._on_tab_changed)
@@ -572,6 +575,8 @@ class MainWindow(QMainWindow):
             self.settings_tab.load()  # frisch einlesen: im Tray kann sich etwas geändert haben
         elif widget is self.history_tab:
             self.history_tab.refresh(force=True)
+        elif widget is self.dictionary_tab:
+            self.dictionary_tab.reload()  # Dateien können von Hand oder per Abgleich geändert worden sein
 
     def showEvent(self, event) -> None:  # noqa: N802 (Qt-Name)
         self._timer.start()

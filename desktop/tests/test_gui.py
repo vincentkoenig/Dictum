@@ -365,3 +365,61 @@ def test_openai_modelle_werden_gespeichert(app, qapp, tmp_path):
     saved = load_settings(path)
     assert saved.transcription.openai_model == "gpt-4o-transcribe"
     assert saved.cleanup.openai_model == "gpt-5-nano"
+
+
+def test_woerterbuch_tab_woerter(app, qapp, tmp_path):
+    from dictum.gui.dictionary_tab import DictionaryTab
+    from dictum.vocabulary import load_dictionary
+
+    words, snips = tmp_path / "d.txt", tmp_path / "s.toml"
+    words.write_text("# Kopf\nDictum\n", encoding="utf-8")
+    tab = DictionaryTab(app, words, snips)
+    assert tab._terms() == ["Dictum"]
+
+    tab.new_word.setText("Supabase")
+    tab.add_word()
+    assert load_dictionary(words) == ["Dictum", "Supabase"]
+    tab.new_word.setText("dictum")  # doppelt, egal ob groß/klein
+    tab.add_word()
+    assert "schon" in tab.message.text() and tab._terms() == ["Dictum", "Supabase"]
+
+    tab.words.setCurrentRow(0)
+    tab.remove_words()
+    assert load_dictionary(words) == ["Supabase"]
+
+
+def test_woerterbuch_tab_snippets(app, qapp, tmp_path):
+    from dictum.gui.dictionary_tab import DictionaryTab
+    from dictum.vocabulary import load_snippets
+
+    words, snips = tmp_path / "d.txt", tmp_path / "s.toml"
+    tab = DictionaryTab(app, words, snips)
+
+    tab.trigger.setText("meine Adresse")
+    tab.text.setPlainText("Max\nMusterstraße 1")
+    tab.apply_snippet()
+    assert [(s.trigger, s.text) for s in load_snippets(snips)] == [("meine Adresse", "Max\nMusterstraße 1")]
+
+    tab.snippet_list.setCurrentRow(0)  # bearbeiten
+    tab.text.setPlainText("Max Neu")
+    tab.apply_snippet()
+    assert load_snippets(snips)[0].text == "Max Neu" and len(load_snippets(snips)) == 1
+
+    tab.new_snippet()
+    tab.trigger.setText("Meine ADRESSE")  # gleicher Auslöser
+    tab.text.setPlainText("x")
+    tab.apply_snippet()
+    assert "gibt es schon" in tab.message.text() and len(load_snippets(snips)) == 1
+
+    tab.snippet_list.setCurrentRow(0)
+    tab.delete_snippet()
+    assert load_snippets(snips) == []
+
+
+def test_leerer_snippet_wird_abgelehnt(app, qapp, tmp_path):
+    from dictum.gui.dictionary_tab import DictionaryTab
+
+    tab = DictionaryTab(app, tmp_path / "d.txt", tmp_path / "s.toml")
+    tab.trigger.setText("nur Auslöser")
+    tab.apply_snippet()
+    assert "leer" in tab.message.text() and not (tmp_path / "s.toml").exists()
