@@ -35,6 +35,8 @@ Tippen ist langsam, und fertige Diktier-Dienste schicken jedes Wort an einen fre
 - Stiehlt nie den Fokus, damit der Text im richtigen Programm landet
 - Töne bei Start und Ende sind standardmäßig aus, einschaltbar mit einstellbarer Lautstärke
 
+![Flow Bar](docs/images/flow-bar.png)
+
 ### 🖥️ Das Fenster
 - Seitenleiste mit **Diktat**, **Meetings**, **Statistik**, **Wörterbuch**, **Textbausteinen**, **Stilen** und einem **Notizblock** zum Ausprobieren
 - **Verlauf** mit Suche, den man lokal speichern, begrenzen oder ausschalten kann
@@ -52,14 +54,6 @@ Tippen ist langsam, und fertige Diktier-Dienste schicken jedes Wort an einen fre
 ### 📱 Handy
 - **Web-App (PWA)** auf GitHub Pages: Aufnehmen, auch offline (Warteschlange im Browser), Liste, Suche, Detailansicht, Markdown-Export, Wörterbuch und Textbausteine, die mit dem PC abgeglichen werden
 - **Android-App (Prototyp, Flutter)**: Hülle um die Web-App mit nativem Mikrofon-Dienst für Aufnahmen bei gesperrtem Bildschirm. Gebaut und getestet, **auf dem Handy aber noch nicht überzeugend** (Transkriptqualität, fehlende Sperrbildschirm-Benachrichtigung), deshalb ist der Fokus aktuell der PC
-
-### 🔒 Datenschutz
-- Persönliche Daten (Einstellungen, Wörterbuch, Verlauf, Logs) bleiben **auf dem PC**. Audio wird nie gespeichert
-- Lokale Erkennung ist möglich, dann verlässt das Audio den PC nicht
-- Kontext und Lern-Wörterbuch lesen Textfelder nur auf ausdrücklichen Wunsch (**aus**, bis man sie einschaltet), nie Passwortfelder
-- API-Keys liegen nur in der lokalen `.env` bzw. als Supabase-Secrets, nie im Repo und nie im Browser
-
-![Flow Bar](docs/images/flow-bar.png)
 
 ## Tech Stack
 
@@ -83,6 +77,7 @@ Tippen ist langsam, und fertige Diktier-Dienste schicken jedes Wort an einen fre
 - **pynput** – globale Hotkeys inklusive Maustasten, Tastendruck simulieren
 - **pywin32, psutil, uiautomation** – Zwischenablage mit allen Formaten, aktives Programm, Text im Feld lesen
 - **sounddevice, soundcard, soundfile** – Mikrofon, PC-Ton (WASAPI-Loopback), Opus-Aufnahmen
+- **Figtree, EB Garamond** – mitgelieferte freie Schriften (SIL Open Font License, Lizenztexte in `desktop/assets/fonts`)
 - **tomlkit** – Einstellungen schreiben, ohne die Kommentare der Datei zu verlieren
 - **SQLite** – lokaler Verlauf und Statistik
 - **PyInstaller** – baut `Dictum.exe`
@@ -253,31 +248,3 @@ Ein Diktat von 40 Sekunden kostet mit OpenAI-Erkennung und Claude-Bereinigung et
 | [docs/FEATURES.md](docs/FEATURES.md) | Funktionsvergleich mit Wispr Flow, Pocket und Plaud |
 | [docs/PLAN.md](docs/PLAN.md) | Projektplan nach Phasen |
 | [docs/GLOSSAR.md](docs/GLOSSAR.md) | Fachbegriffe einfach erklärt |
-
-## Stand und Ausblick
-
-| Phase | Inhalt | Stand |
-|---|---|---|
-| 0–5 | Grundgerüst, Diktat, KI-Text, Backend, Handy-Web-App, Meetings am PC | ✅ |
-| 6 | Dauerbetrieb und Fenster am PC | ✅ |
-| 7 | Android-App mit Hintergrundaufnahme | 🔧 Prototyp, Test am Handy offen |
-| 8 | Wispr-Funktionen am PC (freie Tasten, Stile, Command Mode, Flüstermodus, Lern-Wörterbuch, Statistik, `.exe`, neues Design) | ✅ |
-| 9–11 | Aufnahmen auf Pocket/Plaud-Niveau, Wissen und Automatisierung, Android-Extras | ⏳ |
-
-**Ehrlich zum Stand:**
-- Die PC-App wurde im Alltag ausprobiert (Diktat lokal und über OpenAI, Bereinigung, Verlauf, Statistik). **Flüstermodus, Command Mode und Lern-Wörterbuch** sind bisher nur mit Attrappen und künstlichen Tönen getestet, nicht mit echter Stimme in vielen Programmen.
-- Das Lesen von Textfeldern (Kontext, Lern-Wörterbuch) hängt an UI Automation. Programme, die ihr Feld nicht preisgeben, liefern nichts.
-- In Programmen, die mit Administratorrechten laufen, kann Windows das simulierte Einfügen blockieren.
-- Der **Entwickler-Modus** (CamelCase, Dateinamen) fehlt noch.
-- Nur Windows. Die Handy-App ist ein Prototyp.
-
-## Datenschutz und Recht
-
-- API-Keys liegen **nur** lokal in `.env` bzw. als Supabase-Secrets, nie im Repo und nie im Browser.
-- Gespräche dürfen in Deutschland nur mit Zustimmung **aller** Beteiligten aufgenommen werden (§ 201 StGB). Dictum erinnert beim Start einer Aufnahme daran.
-- Bei der Cloud-Erkennung und der KI-Bereinigung gehen Audio bzw. Text an den jeweiligen Anbieter (OpenAI, Anthropic). Wer das nicht möchte, nutzt die lokale Erkennung und schaltet die Bereinigung aus.
-- Für einen Einsatz mit Kundendaten wären zusätzlich Zugriffskontrolle und Auftragsverarbeitungsverträge mit den Anbietern nötig.
-
-## Lizenz
-
-[MIT](LICENSE). Die mitgelieferten Schriften **Figtree** und **EB Garamond** stehen unter der [SIL Open Font License](desktop/assets/fonts) (Lizenztexte liegen im Ordner `desktop/assets/fonts`).
