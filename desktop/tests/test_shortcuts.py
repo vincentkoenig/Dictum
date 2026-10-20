@@ -32,3 +32,7 @@ def test_echte_ordner_gibt_es():
 
 def test_icon_ist_im_repo():
     assert shortcuts.ICON_PATH.exists()
+
+
+def test_autostart_ordner_ist_bekannt():
+    assert shortcuts.folder_for("startup").is_dir()

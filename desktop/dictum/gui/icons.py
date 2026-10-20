@@ -98,6 +98,14 @@ def nav_icon(name: str, color: str, size: int = 20) -> QIcon:
             p.setBrush(pen.color())
             p.drawEllipse(pt(knob, y), 1.8 * s, 1.8 * s)
             p.setBrush(Qt.BrushStyle.NoBrush)
+    elif name == "record":                        # Ring mit Punkt (wie das Notetaker-Symbol bei Wispr)
+        p.drawEllipse(r(3.5, 3.5, 13, 13))
+        p.setBrush(pen.color())
+        p.drawEllipse(r(7.2, 7.2, 5.6, 5.6))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+    elif name == "chevron":                       # kleiner Pfeil nach oben
+        p.drawLine(pt(5.5, 12), pt(10, 7.5))
+        p.drawLine(pt(10, 7.5), pt(14.5, 12))
     elif name == "min":
         p.drawLine(pt(5, 10), pt(15, 10))
     elif name == "max":

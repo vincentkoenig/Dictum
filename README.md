@@ -30,7 +30,8 @@ Tippen ist langsam, und fertige Diktier-Dienste schicken jedes Wort an einen fre
 - **Wörterbuch, Textbausteine und Lern-Wörterbuch**: Namen und Fachbegriffe verbessern Erkennung und Bereinigung, Textbausteine werden per Zuruf eingefügt, und auf Wunsch lernt Dictum aus deinen Korrekturen im Textfeld
 
 ### 🫧 Flow Bar
-- Kleine Blase unten in der Bildschirmmitte, immer sichtbar: ein schmaler Strich, der beim Überfahren größer wird. Ein Klick startet und beendet das Diktat
+- Kleine Blase unten in der Bildschirmmitte, immer sichtbar: ein schmaler Strich, der beim Überfahren zu zwei Kapseln wird (Mikrofon, Aufnahme-Knopf mit Pfeil), mit Hinweis über dem Knopf unter der Maus
+- Mikrofon: Diktat starten und beenden. Aufnahme-Knopf: Meeting starten und beenden. Pfeil: Karte mit den Meeting-Arten
 - Zeigt während der Arbeit „Hört zu …“, „Transkribiert …“, „Formuliert …“
 - Stiehlt nie den Fokus, damit der Text im richtigen Programm landet
 - Töne bei Start und Ende sind standardmäßig aus, einschaltbar mit einstellbarer Lautstärke

@@ -568,11 +568,12 @@ solange sie in den Einstellungen eingeschaltet ist.
 | Zustand | Aussehen | Klick |
 |---|---|---|
 | Ruhe | schmaler dunkler Strich | |
-| Maus darüber | Blase wird größer: „Klicken zum Diktieren · Strg rechts“ | startet ein Diktat |
+| Maus darüber | zwei Kapseln: links **Mikrofon**, rechts **Aufnahme-Knopf** mit **Pfeil**. Der Knopf unter der Maus wird heller, darüber steht ein Hinweis („Diktieren **Strg rechts**“, „Meeting aufnehmen“) | Mikrofon: Diktat starten/beenden · Aufnahme: Meeting starten/beenden (rot, solange es läuft) · Pfeil: Karte mit den Meeting-Arten |
 | Aufnahme | „● Hört zu …“ (bzw. „Befehl – sprich …“) | beendet die Aufnahme |
 | Verarbeitung, Meldung | „Transkribiert …“, „Formuliert …“, „Nichts erkannt“ … | nur Anzeige |
 
-Ein Klick verhält sich wie zweimaliges Antippen der Taste: `HotkeyStateMachine.start_toggled()` startet im
+Die Blase ist der Flow Bar von Wispr Flow nachempfunden (Kapseln, Hinweis über dem Knopf, kleine Karte beim Pfeil; die Karte zeigt
+statt „Kalender verbinden“ die Meeting-Arten). Ein Klick auf das Mikrofon verhält sich wie zweimaliges Antippen der Taste: `HotkeyStateMachine.start_toggled()` startet im
 Zustand `TOGGLED`, `finish()` beendet. Dadurch kommen Mausklick und Tastatur nicht durcheinander. Die Blase
 **stiehlt nie den Fokus**: Das Fenster hat `WindowDoesNotAcceptFocus` (unter Windows `WS_EX_NOACTIVATE`), also
 bleibt auch nach einem Klick das Programm aktiv, in das der Text soll. Mit Flow Bar sitzt die Blase auf dem

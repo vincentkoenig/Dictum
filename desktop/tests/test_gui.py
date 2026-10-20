@@ -623,12 +623,11 @@ def test_lernen_ein_und_ausschalten(app, qapp, tmp_path):
 # --- Flow Bar -------------------------------------------------------------------------
 
 def test_flow_bar_ruhe_hover_status(qapp):
-    overlay = Overlay(flow_bar=True, hint="Klicken zum Diktieren")
+    overlay = Overlay(flow_bar=True, hotkey="Strg rechts")
     assert overlay.mode == "idle"                              # immer sichtbar: schmaler Strich
 
     overlay._on_hover(True)
-    assert overlay.mode == "hover" and overlay._pill.text.text() == "Klicken zum Diktieren"
-    assert overlay._pill.clickable
+    assert overlay.mode == "hover"                             # zwei Kapseln mit Mikrofon, Aufnahme, Pfeil
     overlay._on_hover(False)
     assert overlay.mode == "idle"
 
@@ -638,6 +637,65 @@ def test_flow_bar_ruhe_hover_status(qapp):
     assert not overlay._pill.clickable                             # Verarbeitung: nur Anzeige
     overlay._hide_now()
     assert overlay.mode == "idle"                                  # zurück zum Strich, nicht weg
+
+
+def test_flow_bar_hover_knoepfe_hinweise_und_klicks(qapp):
+    from dictum.gui.overlay import hover_rects
+
+    overlay = Overlay(flow_bar=True, hotkey="Strg rechts")
+    overlay._on_hover(True)
+    rects = hover_rects()
+    pill = overlay._pill
+    assert pill.button_at(rects["dictate"].center()) == "dictate"
+    assert pill.button_at(rects["meeting"].center()) == "meeting"
+    assert pill.button_at(rects["more"].center()) == "more"
+    assert pill.button_at(QPointF(0, 0)) == ""                  # Zwischenraum: kein Knopf
+
+    # Hinweis über dem Knopf unter der Maus
+    overlay._on_button_hovered("dictate")
+    assert overlay._tip.isVisible() and "Diktieren" in overlay._tip.label.text() and "Strg rechts" in overlay._tip.label.text()
+    overlay._on_button_hovered("meeting")
+    assert "Meeting aufnehmen" in overlay._tip.label.text()
+    overlay.set_meeting(True)
+    qapp.processEvents()
+    overlay._on_button_hovered("meeting")
+    assert "Meeting beenden" in overlay._tip.label.text()
+    overlay._on_button_hovered("")
+    assert not overlay._tip.isVisible()
+
+    got = []
+    overlay.clicked.connect(lambda: got.append("diktat"))
+    overlay.meeting_clicked.connect(lambda: got.append("meeting"))
+    overlay._on_button_clicked("dictate")
+    overlay._on_button_clicked("meeting")
+    assert got == ["diktat", "meeting"]
+
+
+def test_flow_bar_karte_mit_meeting_arten(qapp):
+    overlay = Overlay(flow_bar=True)
+    overlay._on_hover(True)
+    chosen, opened = [], []
+    overlay.template_chosen.connect(chosen.append)
+    overlay.open_window_clicked.connect(lambda: opened.append(1))
+    overlay._on_button_clicked("more")
+    assert overlay._card.isVisible()
+    overlay._on_hover(False)
+    assert overlay.mode == "hover"                              # solange die Karte offen ist, bleibt die Blase groß
+    overlay._on_template("interview")
+    assert chosen == ["interview"] and not overlay._card.isVisible()
+    overlay._on_button_clicked("more")
+    overlay._on_open_window()
+    assert opened == [1] and not overlay._card.isVisible()
+
+
+def test_flow_bar_aufnahme_knopf_ist_beim_meeting_rot(qapp):
+    overlay = Overlay(flow_bar=True)
+    overlay.set_meeting(True)
+    qapp.processEvents()
+    assert overlay._pill.meeting is True
+    overlay.set_meeting(False)
+    qapp.processEvents()
+    assert overlay._pill.meeting is False
 
 
 def test_flow_bar_aus_verhaelt_sich_wie_frueher(qapp):
@@ -653,12 +711,11 @@ def test_flow_bar_aus_verhaelt_sich_wie_frueher(qapp):
     assert overlay.mode == "hidden"
 
 
-def test_flow_bar_klick_wird_gemeldet(qapp):
+def test_flow_bar_klick_waehrend_aufnahme_wird_gemeldet(qapp):
     overlay = Overlay(flow_bar=True)
     clicks = []
     overlay.clicked.connect(lambda: clicks.append(1))
-    overlay._pill.clickable = True
-    from PySide6.QtCore import QPointF, Qt
+    overlay._on_show("listening")
     from PySide6.QtGui import QMouseEvent
     event = QMouseEvent(QMouseEvent.Type.MouseButtonPress, QPointF(5, 5), QPointF(5, 5),
                         Qt.MouseButton.LeftButton, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier)

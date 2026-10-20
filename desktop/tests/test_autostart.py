@@ -58,3 +58,22 @@ def test_ausgeschaltet_bleibt_ausgeschaltet_beim_auffrischen():
 
 def test_befehl_fuer_die_exe_hat_kein_startskript():
     assert autostart.build_command(r"C:\Programme\Dictum\Dictum.exe", None) == r'"C:\Programme\Dictum\Dictum.exe" --background'
+
+
+def test_autostart_ordner_verknuepfung_startet_still_im_hintergrund(tmp_path):
+    from dictum import shortcuts
+
+    assert not autostart.startup_shortcut_exists(tmp_path)
+    autostart.ensure_startup_shortcut(tmp_path)
+    assert autostart.startup_shortcut_exists(tmp_path)
+    assert "--background" in shortcuts.read(shortcuts.path_for("startup", tmp_path))["arguments"]
+    # Desktop- und Startmenü-Verknüpfungen öffnen dagegen das Fenster
+    assert "--background" not in shortcuts.read(shortcuts.create("desktop", tmp_path))["arguments"]
+    autostart.remove_startup_shortcut(tmp_path)
+    assert not autostart.startup_shortcut_exists(tmp_path)
+
+
+def test_fehlender_run_eintrag_wird_nicht_fuer_testschluessel_erzeugt():
+    # Ohne Eintrag und ohne echten Autostart-Ordner passiert nichts (und nichts Echtes wird angefasst)
+    assert autostart.refresh_if_enabled(TEST_KEY, command="x") is False
+    assert autostart.is_enabled(TEST_KEY) is False

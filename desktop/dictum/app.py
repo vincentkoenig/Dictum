@@ -105,8 +105,11 @@ class DictumApp:
         self.history = History()
         self.hotkey_text = hotkey_label(settings.hotkey.keys)
 
-        self.overlay = Overlay(flow_bar=settings.ui.flow_bar, hint=self._bar_hint())
+        self.overlay = Overlay(flow_bar=settings.ui.flow_bar, hotkey=self.hotkey_text)
         self.overlay.clicked.connect(self.bar_clicked)
+        self.overlay.meeting_clicked.connect(self.toggle_meeting)
+        self.overlay.template_chosen.connect(lambda template: self.meetings.start(template))
+        self.overlay.open_window_clicked.connect(self.show_window)
         self.machine = HotkeyStateMachine(
             on_start=self._start,
             on_stop=self._stop,
@@ -205,7 +208,7 @@ class DictumApp:
             "engine": lambda: self.engine,
             "cleanup": lambda: self.cleanup_enabled,
             "provider": lambda: self.provider.name,
-            "autostart": autostart.is_enabled,
+            "autostart": autostart.is_active,
             "desktop_shortcut": lambda: shortcuts.is_present("desktop"),
             "start_menu_shortcut": lambda: shortcuts.is_present("start_menu"),
         }[setting]()
@@ -222,7 +225,7 @@ class DictumApp:
         elif setting == "provider":
             self.provider = create_provider(value, self.settings.cleanup)
         elif setting == "autostart":
-            if bool(value) != autostart.is_enabled():
+            if bool(value) != autostart.is_active():
                 autostart.set_enabled(bool(value))
         elif setting in ("desktop_shortcut", "start_menu_shortcut"):
             kind = "desktop" if setting == "desktop_shortcut" else "start_menu"
@@ -242,7 +245,7 @@ class DictumApp:
         self.listener.set_keys(new.hotkey.keys)
         self._set_extra_hotkeys(new.hotkey)
         self.hotkey_text = hotkey_label(new.hotkey.keys)
-        self.overlay.set_hint(self._bar_hint())
+        self.overlay.set_hotkey(self.hotkey_text)
         self.overlay.set_flow_bar(new.ui.flow_bar)
         if new.ui.theme != old.ui.theme:
             theme.apply(self.qt, new.ui.theme)
@@ -331,6 +334,7 @@ class DictumApp:
 
     def _refresh_tray(self) -> None:
         self.tray.refresh(self.meetings.is_recording, self.meetings.elapsed)
+        self.overlay.set_meeting(self.meetings.is_recording)  # Aufnahme-Knopf der Flow Bar rot/normal
 
     def _tick(self) -> None:
         if self.meetings.is_recording:
@@ -548,8 +552,12 @@ class DictumApp:
         if self.settings.feedback.sounds:
             sounds.play(frequency, self.settings.feedback.sound_volume)
 
-    def _bar_hint(self) -> str:
-        return f"Klicken zum Diktieren  ·  {self.hotkey_text}"
+    def toggle_meeting(self) -> None:
+        """Aufnahme-Knopf der Flow Bar: Meeting beenden, sonst eines mit der Art "Meeting" starten."""
+        if self.meetings.is_recording:
+            self.meetings.stop()
+        else:
+            self.meetings.start("meeting")
 
     def bar_clicked(self) -> None:
         """Klick auf die Flow Bar: Diktat starten bzw. beenden (wie zweimal die Taste antippen)."""

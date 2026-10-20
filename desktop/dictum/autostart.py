@@ -94,8 +94,46 @@ def disable(key_path: str = RUN_KEY) -> None:
         pass  # war schon aus
 
 
+# --- Zweiter Weg: Verknüpfung im Autostart-Ordner ---------------------------------------
+#
+# Der Run-Eintrag allein hat sich als nicht verlässlich erwiesen: Nach einem Neustart hat Windows
+# ihn einmal gar nicht ausgeführt (im Windows-Ereignisprotokoll fehlte Dictum unter den gestarteten
+# Befehlen, obwohl der Eintrag da war). Deshalb legt Dictum zusätzlich eine Verknüpfung in den
+# Autostart-Ordner (shell:startup). Starten beide, läuft Dictum trotzdem nur einmal: Die zweite
+# Instanz erkennt den Mutex und beendet sich bei `--background` ohne Meldung.
+
+def startup_shortcut_exists(folder: Path | None = None) -> bool:
+    from . import shortcuts
+
+    return shortcuts.is_present("startup", folder)
+
+
+def ensure_startup_shortcut(folder: Path | None = None) -> None:
+    from . import shortcuts
+
+    shortcuts.create("startup", folder)
+    log.info("Autostart-Verknüpfung angelegt")
+
+
+def remove_startup_shortcut(folder: Path | None = None) -> None:
+    from . import shortcuts
+
+    shortcuts.remove("startup", folder)
+
+
+def is_active() -> bool:
+    """Ist Autostart an, egal über welchen der beiden Wege?"""
+    return is_enabled() or startup_shortcut_exists()
+
+
 def set_enabled(on: bool) -> None:
-    enable() if on else disable()
+    """Schaltet beide Wege gemeinsam ein oder aus."""
+    if on:
+        enable()
+        ensure_startup_shortcut()
+    else:
+        disable()
+        remove_startup_shortcut()
 
 
 def refresh_if_enabled(key_path: str = RUN_KEY, command: str | None = None) -> bool:
@@ -103,8 +141,15 @@ def refresh_if_enabled(key_path: str = RUN_KEY, command: str | None = None) -> b
     Dann korrigieren. Gibt True zurück, wenn etwas geändert wurde."""
     stored = current_value(key_path)
     wanted = command or default_command()
-    if stored is not None and stored != wanted:
-        enable(wanted, key_path)
-        log.info("Autostart-Eintrag war veraltet und wurde korrigiert")
-        return True
-    return False
+    changed = False
+    real = key_path == RUN_KEY  # Tests benutzen einen eigenen Schlüssel und fassen den Autostart-Ordner nie an
+    active = stored is not None or (real and startup_shortcut_exists())
+    if active and stored != wanted:
+        enable(wanted, key_path)  # auch wenn der Eintrag fehlte, aber die Verknüpfung da ist
+        log.info("Autostart-Eintrag war veraltet oder fehlte und wurde korrigiert")
+        changed = True
+    if real and active:
+        if not startup_shortcut_exists():
+            ensure_startup_shortcut()
+            changed = True
+    return changed

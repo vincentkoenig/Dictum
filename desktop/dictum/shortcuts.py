@@ -35,6 +35,7 @@ NAME = "Dictum.lnk"
 _FOLDERS = {
     "desktop": shellcon.CSIDL_DESKTOPDIRECTORY,
     "start_menu": shellcon.CSIDL_PROGRAMS,  # Startmenü → Alle Apps
+    "startup": shellcon.CSIDL_STARTUP,      # Autostart-Ordner (shell:startup)
 }
 
 
@@ -55,14 +56,18 @@ def is_present(kind: str, folder: Path | None = None) -> bool:
     return path_for(kind, folder).exists()
 
 
-def create(kind: str, folder: Path | None = None) -> Path:
-    """Legt die Verknüpfung an (oder ersetzt sie). `folder` gibt es für Tests."""
+def create(kind: str, folder: Path | None = None, background: bool | None = None) -> Path:
+    """Legt die Verknüpfung an (oder ersetzt sie). `folder` gibt es für Tests. `background`: still im
+    Infobereich starten, ohne das Fenster zu öffnen (Standard: nur beim Autostart-Ordner)."""
     path = path_for(kind, folder)
+    if background is None:
+        background = kind == "startup"
     link = pythoncom.CoCreateInstance(
         shell.CLSID_ShellLink, None, pythoncom.CLSCTX_INPROC_SERVER, shell.IID_IShellLink
     )
     link.SetPath(str(background_python()))
-    link.SetArguments(" ".join(f'"{a}"' if " " in a else a for a in launch_args()))
+    args = [*launch_args(), *(["--background"] if background else [])]
+    link.SetArguments(" ".join(f'"{a}"' if " " in a else a for a in args))
     link.SetWorkingDirectory(str(background_python().parent if FROZEN else DESKTOP_DIR))
     link.SetDescription("Dictum – Diktieren und Gespräche aufnehmen")
     if ICON_PATH.exists():

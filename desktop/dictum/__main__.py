@@ -6,14 +6,43 @@ import logging
 import sys
 
 from . import autostart
-from .config import ensure_user_dir, load_env, load_settings
+from .config import DESKTOP_DIR, ensure_user_dir, load_env, load_settings
 from .logsetup import setup_logging
 from .single_instance import SingleInstance
 
 log = logging.getLogger("dictum")
 
 
+def _breadcrumb(text: str) -> None:
+    """Eine Zeile in start.log, ganz am Anfang, noch bevor irgendetwas anderes passiert. So lässt sich später
+    sehen, ob Windows Dictum beim Anmelden überhaupt gestartet hat und wie weit es kam. Die Datei behält
+    die letzten 200 Zeilen."""
+    try:
+        from datetime import datetime
+
+        path = DESKTOP_DIR / "start.log"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+        lines.append(f"{datetime.now():%Y-%m-%d %H:%M:%S}  {text}")
+        path.write_text("\n".join(lines[-200:]) + "\n", encoding="utf-8")
+    except Exception:
+        pass  # Diagnose darf den Start nie verhindern
+
+
 def main() -> None:
+    _breadcrumb(f"Start: {' '.join(sys.argv[1:]) or '(ohne Argumente)'}")
+    try:
+        _main()
+    except SystemExit:
+        raise
+    except BaseException:
+        import traceback
+
+        _breadcrumb("ABSTURZ beim Start:\n" + traceback.format_exc())
+        raise
+
+
+def _main() -> None:
     parser = argparse.ArgumentParser(prog="dictum")
     parser.add_argument("--quiet", action="store_true",
                         help="bei einem zweiten Start keine Meldung anzeigen (für Tests/Skripte)")
@@ -55,7 +84,8 @@ def main() -> None:
     instance = SingleInstance(wait_seconds=20 if args.restart else 0)
     if instance.already_running:
         log.warning("Dictum läuft bereits – dieser Start wird beendet.")
-        if not args.quiet:
+        _breadcrumb("läuft bereits, beende diese Instanz")
+        if not (args.quiet or args.background):  # beim Autostart (zwei Wege!) keine Meldung
             # 0x40 = Info-Symbol. Ohne Konsole (pythonw) wäre das sonst die einzige Rückmeldung.
             ctypes.windll.user32.MessageBoxW(
                 0,
