@@ -629,7 +629,9 @@ def test_flow_bar_ruhe_hover_status(qapp):
     overlay._on_hover(True)
     assert overlay.mode == "hover"                             # zwei Kapseln mit Mikrofon, Aufnahme, Pfeil
     overlay._on_hover(False)
-    assert overlay.mode == "idle"
+    assert overlay.mode == "hover"                             # klappt nicht sofort zu (Verzögerung) …
+    overlay._collapse()
+    assert overlay.mode == "idle"                              # … sondern erst danach
 
     overlay._on_show("listening")
     assert overlay.mode == "status" and overlay._pill.clickable    # Klick beendet die Aufnahme
@@ -680,6 +682,7 @@ def test_flow_bar_karte_mit_meeting_arten(qapp):
     overlay._on_button_clicked("more")
     assert overlay._card.isVisible()
     overlay._on_hover(False)
+    overlay._collapse()
     assert overlay.mode == "hover"                              # solange die Karte offen ist, bleibt die Blase groß
     overlay._on_template("interview")
     assert chosen == ["interview"] and not overlay._card.isVisible()
@@ -747,3 +750,35 @@ def test_eigene_schriften_werden_geladen(qapp):
     from PySide6.QtGui import QFontDatabase
     assert "Figtree" in QFontDatabase.families() and "EB Garamond" in QFontDatabase.families()
     assert (fonts.FONT_DIR / "OFL-Figtree.txt").exists() and (fonts.FONT_DIR / "OFL-EBGaramond.txt").exists()
+
+
+def test_flow_bar_ist_ueberall_treffbar_kein_flimmern(qapp):
+    """Der Zwischenraum zwischen den Kapseln und der Rand sind fast unsichtbar, aber nicht durchsichtig: Sonst
+    reicht Windows Mausklicks dort durch, die Maus 'verlässt' die Blase, und sie flimmert."""
+    from dictum.gui.overlay import HOVER_SIZE, IDLE_SIZE, hover_rects
+
+    overlay = Overlay(flow_bar=True)
+    idle = overlay._pill.grab().toImage()
+    assert idle.width() >= IDLE_SIZE[0] - 1
+    for x, y in ((2, 2), (idle.width() // 2, 2), (2, idle.height() - 3), (idle.width() - 3, idle.height() - 3)):
+        assert idle.pixelColor(x, y).alpha() >= 1                # auch ganz außen, abseits des Strichs
+
+    overlay._on_hover(True)
+    img = overlay._pill.grab().toImage()
+    rects = hover_rects()
+    gap = (rects["dictate"].right() + rects["meeting"].left()) / 2     # Mitte zwischen den Kapseln
+    assert img.pixelColor(int(gap), HOVER_SIZE[1] // 2).alpha() >= 1
+    assert img.pixelColor(1, 1).alpha() >= 1
+
+
+def test_flow_bar_hover_fenster_umschliesst_den_ruhestrich(qapp):
+    """Von jeder Stelle des Strichs führt die Maus ohne Lücke zu beiden Kapseln: Das Hover-Fenster ist
+    mindestens so groß wie die Fläche des Ruhestrichs und sitzt auf derselben Mitte und Unterkante."""
+    from dictum.gui.overlay import HOVER_SIZE, IDLE_SIZE
+
+    assert HOVER_SIZE[0] >= IDLE_SIZE[0] and HOVER_SIZE[1] >= IDLE_SIZE[1]
+    overlay = Overlay(flow_bar=True)
+    idle = overlay._pill.geometry()
+    overlay._on_hover(True)
+    hover = overlay._pill.geometry()
+    assert hover.contains(idle)

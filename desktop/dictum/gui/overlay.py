@@ -44,13 +44,14 @@ STATES = {
 }
 FLASH_ICON = ("ⓘ", "#f5a623")
 
-IDLE_SIZE = (64, 20)      # Fläche, auf der man die Blase trifft
+IDLE_SIZE = (110, 30)     # Fläche, auf der man die Blase trifft (großzügig: der Strich selbst ist schmal)
 IDLE_PILL = (44, 7)       # der sichtbare Strich darin
 BOTTOM_MARGIN = 10        # Abstand über der Taskleiste (logische Pixel)
 RED = QColor(229, 72, 77)
+HIT_ALPHA = 12            # fast unsichtbar (5 %), aber für Windows ein Treffer (siehe _Pill.paintEvent)
 
 # Maße der Kapseln im Hover-Zustand
-PAD, BTN_H = 3, 36
+PAD, BTN_H = 8, 36            # PAD: unsichtbarer, aber treffbarer Rand rund um die Kapseln
 DICTATE_W, GAP, MEETING_W, MORE_W = 84, 8, 36, 32
 HOVER_SIZE = (2 * PAD + DICTATE_W + GAP + MEETING_W + MORE_W, 2 * PAD + BTN_H)
 
@@ -151,6 +152,11 @@ class _Pill(QWidget):
     def paintEvent(self, _event) -> None:  # noqa: N802 (Qt-Name)
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        # Fast unsichtbare Grundfläche (Alpha 12 von 255). Unter Windows lassen durchsichtige Fenster Mausklicks
+        # an genau den Stellen durch, an denen nichts gemalt ist, also auch im Zwischenraum der Kapseln. Dann
+        # "verlässt" die Maus das Fenster mitten auf der Blase, sie schrumpft, die Maus ist wieder darauf – es
+        # flimmert. Mit dieser Fläche zählt das ganze Fenster als getroffen.
+        p.fillRect(self.rect(), QColor(0, 0, 0, HIT_ALPHA))
         if self.kind == "idle":
             w, h = IDLE_PILL
             rect = QRectF((self.width() - w) / 2, (self.height() - h) / 2, w, h)
@@ -326,6 +332,11 @@ class Overlay(QObject):
         self._hide_timer = QTimer(self)
         self._hide_timer.setSingleShot(True)
         self._hide_timer.timeout.connect(self._hide_now)
+        # Kleine Verzögerung vor dem Zuklappen: Wer kurz neben die Blase rutscht, soll sie nicht verlieren
+        self._leave_timer = QTimer(self)
+        self._leave_timer.setSingleShot(True)
+        self._leave_timer.setInterval(250)
+        self._leave_timer.timeout.connect(self._collapse)
         # Karte schließt sich von selbst, wenn die Maus weder auf ihr noch auf der Blase ist
         self._card_timer = QTimer(self)
         self._card_timer.setInterval(350)
@@ -393,7 +404,18 @@ class Overlay(QObject):
         self._refresh()
 
     def _on_hover(self, hover: bool) -> None:
-        self._hover = hover
+        if hover:
+            self._leave_timer.stop()
+            self._hover = True
+            self._refresh()
+        else:
+            self._leave_timer.start()
+
+    def _collapse(self) -> None:
+        """Nach dem Verlassen wirklich zuklappen, aber nur, wenn die Maus nicht doch wieder auf der Blase ist."""
+        if self._pill.isVisible() and self._pill.geometry().contains(QCursor.pos()):
+            return
+        self._hover = False
         self._refresh()
 
     def _refresh(self) -> None:

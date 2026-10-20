@@ -572,6 +572,15 @@ solange sie in den Einstellungen eingeschaltet ist.
 | Aufnahme | „● Hört zu …“ (bzw. „Befehl – sprich …“) | beendet die Aufnahme |
 | Verarbeitung, Meldung | „Transkribiert …“, „Formuliert …“, „Nichts erkannt“ … | nur Anzeige |
 
+**Kein Flimmern, überall treffbar:** Unter Windows lassen durchsichtige Fenster Mausklicks genau dort durch, wo nichts
+gemalt ist. Dann „verließ“ die Maus die Blase mitten auf ihr (im Zwischenraum der Kapseln), sie schrumpfte, die Maus
+war wieder darauf, und es flimmerte. Deshalb hat das ganze Fenster eine fast unsichtbare Grundfläche (Alpha 12 von 255,
+`HIT_ALPHA`), der Ruhestrich eine großzügige Trefffläche (110 × 30 Pixel) und das Hover-Fenster einen treffbaren Rand rund
+um die Kapseln. Das Hover-Fenster ist größer als die Fläche des Ruhestrichs und sitzt auf derselben Mitte und Unterkante,
+also führt die Maus von jeder Stelle des Strichs ohne Lücke zu beiden Kapseln. Beim Verlassen klappt die Blase erst nach
+250 ms zu, und nur wenn die Maus wirklich nicht mehr darauf ist (beim Vergrößern schickt Qt kurz ein „Verlassen“).
+Zwei gleichzeitig laufende Blasen an derselben Stelle (z. B. Wispr Flow und Dictum) stören sich gegenseitig.
+
 Die Blase ist der Flow Bar von Wispr Flow nachempfunden (Kapseln, Hinweis über dem Knopf, kleine Karte beim Pfeil; die Karte zeigt
 statt „Kalender verbinden“ die Meeting-Arten). Ein Klick auf das Mikrofon verhält sich wie zweimaliges Antippen der Taste: `HotkeyStateMachine.start_toggled()` startet im
 Zustand `TOGGLED`, `finish()` beendet. Dadurch kommen Mausklick und Tastatur nicht durcheinander. Die Blase
