@@ -572,13 +572,21 @@ solange sie in den Einstellungen eingeschaltet ist.
 | Aufnahme | „● Hört zu …“ (bzw. „Befehl – sprich …“) | beendet die Aufnahme |
 | Verarbeitung, Meldung | „Transkribiert …“, „Formuliert …“, „Nichts erkannt“ … | nur Anzeige |
 
-**Kein Flimmern, überall treffbar:** Unter Windows lassen durchsichtige Fenster Mausklicks genau dort durch, wo nichts
-gemalt ist. Dann „verließ“ die Maus die Blase mitten auf ihr (im Zwischenraum der Kapseln), sie schrumpfte, die Maus
-war wieder darauf, und es flimmerte. Deshalb hat das ganze Fenster eine fast unsichtbare Grundfläche (Alpha 12 von 255,
-`HIT_ALPHA`), der Ruhestrich eine großzügige Trefffläche (110 × 30 Pixel) und das Hover-Fenster einen treffbaren Rand rund
-um die Kapseln. Das Hover-Fenster ist größer als die Fläche des Ruhestrichs und sitzt auf derselben Mitte und Unterkante,
-also führt die Maus von jeder Stelle des Strichs ohne Lücke zu beiden Kapseln. Beim Verlassen klappt die Blase erst nach
-250 ms zu, und nur wenn die Maus wirklich nicht mehr darauf ist (beim Vergrößern schickt Qt kurz ein „Verlassen“).
+**Kein Flimmern, keine sichtbare Grundfläche:** Unter Windows lassen durchsichtige Fenster Mausklicks genau dort durch,
+wo nichts gemalt ist (z. B. im Zwischenraum der Kapseln). Meldete das Fenster selbst „Maus verlassen“, schrumpfte die Blase
+mitten unter dem Zeiger und flimmerte. Ein fast unsichtbarer Schleier über dem Fenster half dagegen, war aber sichtbar und
+ist deshalb wieder weg: Außerhalb der gemalten Kapseln ist das Fenster komplett durchsichtig (Alpha 0, ein Test prüft das
+pixelgenau). Stattdessen fragt das Overlay alle 30 ms die **Mausposition** ab (`_poll`, `_update_hover`) und rechnet selbst
+aus, ob die Maus im Aufklapp-Bereich ist. Das braucht keine Treffer des Fensters und kennt kein Flimmern.
+
+- **Aufklappen:** Die Maus im Ruhebereich (110 × 30 Pixel um den Strich) öffnet die Kapseln.
+- **Offen bleiben:** Solange die Maus im aufgeklappten Fenster ist, auch im Zwischenraum und am Rand, bleibt es offen. Es ist
+  größer als der Ruhebereich und sitzt auf derselben Mitte und Unterkante, deshalb kommt man von jeder Stelle des Strichs
+  direkt zu beiden Kapseln.
+- **Zuklappen:** sofort (beim nächsten Abfragen, also nach höchstens 30 ms), sobald die Maus das aufgeklappte Fenster
+  verlässt. Mit offener Karte zählen Karte und Blase zusammen.
+- **Klicks:** Die Kapseln sind undurchsichtig gemalt und bekommen normale Mausklicks.
+
 Zwei gleichzeitig laufende Blasen an derselben Stelle (z. B. Wispr Flow und Dictum) stören sich gegenseitig.
 
 Die Blase ist der Flow Bar von Wispr Flow nachempfunden (Kapseln, Hinweis über dem Knopf, kleine Karte beim Pfeil; die Karte zeigt

@@ -44,14 +44,14 @@ STATES = {
 }
 FLASH_ICON = ("ⓘ", "#f5a623")
 
-IDLE_SIZE = (110, 30)     # Fläche, auf der man die Blase trifft (großzügig: der Strich selbst ist schmal)
+IDLE_SIZE = (110, 30)     # Fläche, in der die Blase aufklappt (großzügig: der Strich selbst ist schmal)
 IDLE_PILL = (44, 7)       # der sichtbare Strich darin
 BOTTOM_MARGIN = 10        # Abstand über der Taskleiste (logische Pixel)
 RED = QColor(229, 72, 77)
-HIT_ALPHA = 12            # fast unsichtbar (5 %), aber für Windows ein Treffer (siehe _Pill.paintEvent)
+POLL_MS = 30              # so oft wird die Mausposition geprüft (siehe Overlay._poll)
 
 # Maße der Kapseln im Hover-Zustand
-PAD, BTN_H = 8, 36            # PAD: unsichtbarer, aber treffbarer Rand rund um die Kapseln
+PAD, BTN_H = 4, 36            # PAD: kleiner Rand rund um die Kapseln
 DICTATE_W, GAP, MEETING_W, MORE_W = 84, 8, 36, 32
 HOVER_SIZE = (2 * PAD + DICTATE_W + GAP + MEETING_W + MORE_W, 2 * PAD + BTN_H)
 
@@ -72,8 +72,6 @@ class _Pill(QWidget):
 
     clicked = Signal()                 # Klick auf die Statusanzeige (beendet eine Aufnahme)
     button_clicked = Signal(str)       # Klick auf einen Hover-Knopf: "dictate", "meeting", "more"
-    hover_changed = Signal(bool)       # Maus betritt/verlässt das Fenster
-    button_hovered = Signal(str)       # Knopf unter der Maus ("" = keiner)
 
     def __init__(self) -> None:
         super().__init__(
@@ -152,11 +150,6 @@ class _Pill(QWidget):
     def paintEvent(self, _event) -> None:  # noqa: N802 (Qt-Name)
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        # Fast unsichtbare Grundfläche (Alpha 12 von 255). Unter Windows lassen durchsichtige Fenster Mausklicks
-        # an genau den Stellen durch, an denen nichts gemalt ist, also auch im Zwischenraum der Kapseln. Dann
-        # "verlässt" die Maus das Fenster mitten auf der Blase, sie schrumpft, die Maus ist wieder darauf – es
-        # flimmert. Mit dieser Fläche zählt das ganze Fenster als getroffen.
-        p.fillRect(self.rect(), QColor(0, 0, 0, HIT_ALPHA))
         if self.kind == "idle":
             w, h = IDLE_PILL
             rect = QRectF((self.width() - w) / 2, (self.height() - h) / 2, w, h)
@@ -191,24 +184,17 @@ class _Pill(QWidget):
                 p, int(rect.center().x() - icon_size / 2), int(rect.center().y() - icon_size / 2), icon_size, icon_size)
 
     # --- Maus -------------------------------------------------------------------------
+    #
+    # Ob die Maus auf der Blase ist, merkt nicht das Fenster (Enter/Leave), sondern das Overlay, das die
+    # Mausposition alle 30 ms abfragt. Grund: Unter Windows reicht ein durchsichtiges Fenster Mausklicks dort
+    # durch, wo nichts gemalt ist (z. B. im Zwischenraum der Kapseln). Das Fenster meldete dann "Maus
+    # verlassen", die Blase schrumpfte, und es flimmerte. Das Abfragen der Position kennt dieses Problem nicht
+    # und braucht keine sichtbare Grundfläche. Klicks kommen weiter als normale Mausereignisse an: Die gemalten
+    # Kapseln sind undurchsichtig und werden getroffen.
 
-    def enterEvent(self, event) -> None:  # noqa: N802
-        self.hover_changed.emit(True)
-        super().enterEvent(event)
-
-    def leaveEvent(self, event) -> None:  # noqa: N802
-        self._set_hovered("")
-        self.hover_changed.emit(False)
-        super().leaveEvent(event)
-
-    def mouseMoveEvent(self, event) -> None:  # noqa: N802
-        self._set_hovered(self.button_at(event.position()))
-        super().mouseMoveEvent(event)
-
-    def _set_hovered(self, name: str) -> None:
+    def set_hovered(self, name: str) -> None:
         if name != self.hovered:
             self.hovered = name
-            self.button_hovered.emit(name)
             self.update()
 
     def mousePressEvent(self, event) -> None:  # noqa: N802
@@ -319,8 +305,9 @@ class Overlay(QObject):
     open_window_clicked = Signal()      # "Dictum öffnen" in der Karte
     _sig_meeting = Signal(bool)
 
-    def __init__(self, flow_bar: bool = False, hotkey: str = "") -> None:
+    def __init__(self, flow_bar: bool = False, hotkey: str = "", poll: bool = True) -> None:
         super().__init__()
+        self._poll_enabled = poll  # Tests schalten das Abfragen ab und geben die Mausposition selbst vor
         self._pill = _Pill()
         self._tip = _Tip()
         self._card = _Card()
@@ -332,27 +319,22 @@ class Overlay(QObject):
         self._hide_timer = QTimer(self)
         self._hide_timer.setSingleShot(True)
         self._hide_timer.timeout.connect(self._hide_now)
-        # Kleine Verzögerung vor dem Zuklappen: Wer kurz neben die Blase rutscht, soll sie nicht verlieren
-        self._leave_timer = QTimer(self)
-        self._leave_timer.setSingleShot(True)
-        self._leave_timer.setInterval(250)
-        self._leave_timer.timeout.connect(self._collapse)
-        # Karte schließt sich von selbst, wenn die Maus weder auf ihr noch auf der Blase ist
-        self._card_timer = QTimer(self)
-        self._card_timer.setInterval(350)
-        self._card_timer.timeout.connect(self._check_card)
+        # Fragt regelmäßig die Mausposition ab: aufklappen, Knopf unter der Maus, zuklappen (siehe _Pill)
+        self._poll_timer = QTimer(self)
+        self._poll_timer.setInterval(POLL_MS)
+        self._poll_timer.timeout.connect(self._poll)
         # Signale → Slots: Aufrufe aus fremden Threads laufen so im Hauptthread
         self._sig_show.connect(self._on_show)
         self._sig_flash.connect(self._on_flash)
         self._sig_hide.connect(self._hide_now)
         self._sig_meeting.connect(self._set_meeting_now)
-        self._pill.hover_changed.connect(self._on_hover)
-        self._pill.button_hovered.connect(self._on_button_hovered)
         self._pill.button_clicked.connect(self._on_button_clicked)
         self._pill.clicked.connect(self.clicked)
         self._card.template_chosen.connect(self._on_template)
         self._card.open_window.connect(self._on_open_window)
         if flow_bar:
+            if poll:
+                self._poll_timer.start()
             self._refresh()
 
     # --- Aus jedem Thread aufrufbar ---------------------------------------------------
@@ -372,6 +354,11 @@ class Overlay(QObject):
     def set_flow_bar(self, enabled: bool) -> None:
         """Flow Bar (dauerhaft sichtbare Blase) ein- oder ausschalten."""
         self._flow_bar = enabled
+        if enabled and self._poll_enabled:
+            self._poll_timer.start()
+        else:
+            self._poll_timer.stop()
+            self._hover = False
         self._refresh()
 
     def set_hotkey(self, text: str) -> None:
@@ -403,20 +390,33 @@ class Overlay(QObject):
         self._status, self._status_key = None, ""
         self._refresh()
 
-    def _on_hover(self, hover: bool) -> None:
-        if hover:
-            self._leave_timer.stop()
-            self._hover = True
-            self._refresh()
-        else:
-            self._leave_timer.start()
+    def _poll(self) -> None:
+        self._update_hover(QCursor.pos())
 
-    def _collapse(self) -> None:
-        """Nach dem Verlassen wirklich zuklappen, aber nur, wenn die Maus nicht doch wieder auf der Blase ist."""
-        if self._pill.isVisible() and self._pill.geometry().contains(QCursor.pos()):
-            return
-        self._hover = False
-        self._refresh()
+    def _zone(self):
+        """Der Bereich, in dem die Maus die Blase offen hält: ihr Fenster, mit offener Karte beides zusammen.
+        Im Ruhezustand ist das die kleine Trefffläche, aufgeklappt das größere Fenster. Dieser Unterschied
+        wirkt als Spielraum: Wer aufgeklappt hat, bleibt drin, solange er nicht deutlich weggeht."""
+        zone = self._pill.geometry()
+        if self._card.isVisible():
+            zone = zone.united(self._card.geometry()).adjusted(-10, -10, 10, 10)
+        return zone
+
+    def _update_hover(self, pos) -> None:
+        """Maus-Logik. `pos` ist die globale Mausposition (Parameter, damit Tests sie vorgeben können)."""
+        if self._status is not None or not self._flow_bar:
+            return  # während einer Aufnahme/Verarbeitung gibt es nichts aufzuklappen
+        inside = self._zone().contains(pos)
+        if inside != self._hover:
+            self._hover = inside
+            if not inside and self._card.isVisible():
+                self._card.hide()
+            self._refresh()
+        if self._hover and self._pill.kind == "hover":
+            local = pos - self._pill.geometry().topLeft()
+            self._set_hovered_button(self._pill.button_at(QPointF(local)))
+        else:
+            self._set_hovered_button("")
 
     def _refresh(self) -> None:
         """Zeigt je nach Lage Status, Hover-Kapseln, den Ruhestrich oder nichts."""
@@ -448,7 +448,10 @@ class Overlay(QObject):
             "more": ("Weitere Optionen", ""),
         }[name]
 
-    def _on_button_hovered(self, name: str) -> None:
+    def _set_hovered_button(self, name: str) -> None:
+        if name == self._pill.hovered:
+            return
+        self._pill.set_hovered(name)
         if not name or self._card.isVisible():
             self._tip.hide()
             return
@@ -473,36 +476,20 @@ class Overlay(QObject):
     def toggle_card(self) -> None:
         if self._card.isVisible():
             self._card.hide()
-            self._card_timer.stop()
             self._refresh()
             return
         self._card.adjustSize()
         center = self._pill.mapToGlobal(self._pill.rect().center())
         self._card.move(center.x() - self._card.width() // 2, self._pill.y() - self._card.height() - 10)
         self._card.show()
-        self._card_timer.start()
-
-    def _check_card(self) -> None:
-        """Karte schließen, sobald die Maus weder auf ihr noch auf der Blase ist."""
-        if not self._card.isVisible():
-            self._card_timer.stop()
-            return
-        pos = QCursor.pos()
-        zone = self._card.geometry().united(self._pill.geometry()).adjusted(-14, -14, 14, 14)
-        if not zone.contains(pos):
-            self._card.hide()
-            self._card_timer.stop()
-            self._refresh()
 
     def _on_template(self, key: str) -> None:
         self._card.hide()
-        self._card_timer.stop()
         self.template_chosen.emit(key)
         self._refresh()
 
     def _on_open_window(self) -> None:
         self._card.hide()
-        self._card_timer.stop()
         self.open_window_clicked.emit()
         self._refresh()
 

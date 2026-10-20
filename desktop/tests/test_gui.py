@@ -622,16 +622,28 @@ def test_lernen_ein_und_ausschalten(app, qapp, tmp_path):
 
 # --- Flow Bar -------------------------------------------------------------------------
 
+def mouse_on(overlay, name=None, offset=(0, 0)):
+    """Eine globale Mausposition: Mitte des Ruhestrichs, oder Mitte eines Hover-Knopfs im aufgeklappten Fenster."""
+    from PySide6.QtCore import QPoint
+
+    from dictum.gui.overlay import hover_rects
+
+    geo = overlay._pill.geometry()
+    if name is None:
+        return QPoint(geo.center().x() + offset[0], geo.center().y() + offset[1])
+    c = hover_rects()[name].center()
+    return QPoint(geo.x() + int(c.x()) + offset[0], geo.y() + int(c.y()) + offset[1])
+
+
 def test_flow_bar_ruhe_hover_status(qapp):
-    overlay = Overlay(flow_bar=True, hotkey="Strg rechts")
+    overlay = Overlay(flow_bar=True, poll=False, hotkey="Strg rechts")
     assert overlay.mode == "idle"                              # immer sichtbar: schmaler Strich
 
-    overlay._on_hover(True)
+    overlay._update_hover(mouse_on(overlay))
     assert overlay.mode == "hover"                             # zwei Kapseln mit Mikrofon, Aufnahme, Pfeil
-    overlay._on_hover(False)
-    assert overlay.mode == "hover"                             # klappt nicht sofort zu (Verzögerung) …
-    overlay._collapse()
-    assert overlay.mode == "idle"                              # … sondern erst danach
+    far = mouse_on(overlay, offset=(0, -300))
+    overlay._update_hover(far)
+    assert overlay.mode == "idle"                              # sofort wieder zu, ohne Verzögerung
 
     overlay._on_show("listening")
     assert overlay.mode == "status" and overlay._pill.clickable    # Klick beendet die Aufnahme
@@ -641,29 +653,60 @@ def test_flow_bar_ruhe_hover_status(qapp):
     assert overlay.mode == "idle"                                  # zurück zum Strich, nicht weg
 
 
+def test_flow_bar_zwischenraum_und_rand_halten_sie_offen(qapp):
+    """Die Maus darf überall auf der aufgeklappten Blase sein, auch im Zwischenraum der Kapseln und ganz am Rand,
+    ohne dass sie zuklappt. Erst außerhalb ihres Fensters klappt sie zu."""
+    from PySide6.QtCore import QPoint
+
+    from dictum.gui.overlay import hover_rects
+
+    overlay = Overlay(flow_bar=True, poll=False)
+    geo0 = overlay._pill.geometry()
+    # Von jedem Rand des Ruhe-Bereichs aus aufklappen
+    for point in (QPoint(geo0.left() + 1, geo0.center().y()), QPoint(geo0.right() - 1, geo0.center().y()),
+                  QPoint(geo0.center().x(), geo0.top() + 1), QPoint(geo0.center().x(), geo0.bottom() - 1)):
+        overlay._update_hover(QPoint(0, 0))                      # erst weg ...
+        assert overlay.mode == "idle"
+        overlay._update_hover(point)                             # ... dann auf den Rand
+        assert overlay.mode == "hover"
+
+    rects = hover_rects()
+    gap_x = int((rects["dictate"].right() + rects["meeting"].left()) / 2)
+    geo = overlay._pill.geometry()
+    for point in (QPoint(geo.x() + gap_x, geo.y() + 20),        # Zwischenraum
+                  QPoint(geo.x() + 1, geo.y() + 1),            # Ecke
+                  QPoint(geo.right() - 1, geo.bottom() - 1)):
+        overlay._update_hover(point)
+        assert overlay.mode == "hover"
+    overlay._update_hover(QPoint(geo.right() + 5, geo.center().y()))
+    assert overlay.mode == "idle"                                # direkt neben der Blase: zu
+
+
 def test_flow_bar_hover_knoepfe_hinweise_und_klicks(qapp):
     from dictum.gui.overlay import hover_rects
 
-    overlay = Overlay(flow_bar=True, hotkey="Strg rechts")
-    overlay._on_hover(True)
+    overlay = Overlay(flow_bar=True, poll=False, hotkey="Strg rechts")
+    overlay._update_hover(mouse_on(overlay))
     rects = hover_rects()
     pill = overlay._pill
     assert pill.button_at(rects["dictate"].center()) == "dictate"
     assert pill.button_at(rects["meeting"].center()) == "meeting"
     assert pill.button_at(rects["more"].center()) == "more"
-    assert pill.button_at(QPointF(0, 0)) == ""                  # Zwischenraum: kein Knopf
+    assert pill.button_at(QPointF(0, 0)) == ""                  # Zwischenraum/Rand: kein Knopf
 
     # Hinweis über dem Knopf unter der Maus
-    overlay._on_button_hovered("dictate")
+    overlay._update_hover(mouse_on(overlay, "dictate"))
+    assert pill.hovered == "dictate"
     assert overlay._tip.isVisible() and "Diktieren" in overlay._tip.label.text() and "Strg rechts" in overlay._tip.label.text()
-    overlay._on_button_hovered("meeting")
-    assert "Meeting aufnehmen" in overlay._tip.label.text()
+    overlay._update_hover(mouse_on(overlay, "meeting"))
+    assert pill.hovered == "meeting" and "Meeting aufnehmen" in overlay._tip.label.text()
     overlay.set_meeting(True)
     qapp.processEvents()
-    overlay._on_button_hovered("meeting")
+    overlay._set_hovered_button("")
+    overlay._update_hover(mouse_on(overlay, "meeting"))
     assert "Meeting beenden" in overlay._tip.label.text()
-    overlay._on_button_hovered("")
-    assert not overlay._tip.isVisible()
+    overlay._update_hover(mouse_on(overlay, offset=(0, -300)))
+    assert not overlay._tip.isVisible() and pill.hovered == ""
 
     got = []
     overlay.clicked.connect(lambda: got.append("diktat"))
@@ -674,16 +717,19 @@ def test_flow_bar_hover_knoepfe_hinweise_und_klicks(qapp):
 
 
 def test_flow_bar_karte_mit_meeting_arten(qapp):
-    overlay = Overlay(flow_bar=True)
-    overlay._on_hover(True)
+    overlay = Overlay(flow_bar=True, poll=False)
+    overlay._update_hover(mouse_on(overlay))
     chosen, opened = [], []
     overlay.template_chosen.connect(chosen.append)
     overlay.open_window_clicked.connect(lambda: opened.append(1))
     overlay._on_button_clicked("more")
     assert overlay._card.isVisible()
-    overlay._on_hover(False)
-    overlay._collapse()
-    assert overlay.mode == "hover"                              # solange die Karte offen ist, bleibt die Blase groß
+    overlay._update_hover(overlay._card.geometry().center())     # Maus in der Karte: bleibt offen
+    assert overlay.mode == "hover" and overlay._card.isVisible()
+    overlay._update_hover(mouse_on(overlay, offset=(0, -600)))   # weit weg: Karte und Blase klappen zu
+    assert not overlay._card.isVisible() and overlay.mode == "idle"
+    overlay._update_hover(mouse_on(overlay))
+    overlay._on_button_clicked("more")
     overlay._on_template("interview")
     assert chosen == ["interview"] and not overlay._card.isVisible()
     overlay._on_button_clicked("more")
@@ -692,7 +738,7 @@ def test_flow_bar_karte_mit_meeting_arten(qapp):
 
 
 def test_flow_bar_aufnahme_knopf_ist_beim_meeting_rot(qapp):
-    overlay = Overlay(flow_bar=True)
+    overlay = Overlay(flow_bar=True, poll=False)
     overlay.set_meeting(True)
     qapp.processEvents()
     assert overlay._pill.meeting is True
@@ -715,7 +761,7 @@ def test_flow_bar_aus_verhaelt_sich_wie_frueher(qapp):
 
 
 def test_flow_bar_klick_waehrend_aufnahme_wird_gemeldet(qapp):
-    overlay = Overlay(flow_bar=True)
+    overlay = Overlay(flow_bar=True, poll=False)
     clicks = []
     overlay.clicked.connect(lambda: clicks.append(1))
     overlay._on_show("listening")
@@ -724,6 +770,36 @@ def test_flow_bar_klick_waehrend_aufnahme_wird_gemeldet(qapp):
                         Qt.MouseButton.LeftButton, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier)
     overlay._pill.mousePressEvent(event)
     assert clicks == [1]
+
+
+def test_flow_bar_hat_keine_sichtbare_grundflaeche(qapp):
+    """Außerhalb der gemalten Formen ist das Fenster komplett durchsichtig (Alpha 0): kein Schleier, kein Kasten."""
+    from dictum.gui.overlay import hover_rects
+
+    overlay = Overlay(flow_bar=True, poll=False)
+    idle = overlay._pill.grab().toImage()
+    for x, y in ((1, 1), (idle.width() - 2, 1), (1, idle.height() - 2), (idle.width() - 2, idle.height() - 2),
+                 (idle.width() // 2, 2)):
+        assert idle.pixelColor(x, y).alpha() == 0
+
+    overlay._update_hover(mouse_on(overlay))
+    img = overlay._pill.grab().toImage()
+    rects = hover_rects()
+    gap = int((rects["dictate"].right() + rects["meeting"].left()) / 2)
+    assert img.pixelColor(gap, img.height() // 2).alpha() == 0     # Zwischenraum der Kapseln
+    assert img.pixelColor(0, 0).alpha() == 0 and img.pixelColor(img.width() - 1, 0).alpha() == 0
+
+
+def test_flow_bar_hover_fenster_umschliesst_den_ruhestrich(qapp):
+    """Von jeder Stelle des Strichs führt die Maus ohne Lücke zu beiden Kapseln: Das Hover-Fenster ist
+    mindestens so groß wie die Fläche des Ruhestrichs und sitzt auf derselben Mitte und Unterkante."""
+    from dictum.gui.overlay import HOVER_SIZE, IDLE_SIZE
+
+    assert HOVER_SIZE[0] >= IDLE_SIZE[0] and HOVER_SIZE[1] >= IDLE_SIZE[1]
+    overlay = Overlay(flow_bar=True, poll=False)
+    idle = overlay._pill.geometry()
+    overlay._update_hover(mouse_on(overlay))
+    assert overlay._pill.geometry().contains(idle)
 
 
 def test_flow_bar_und_ton_einstellungen_werden_gespeichert(app, qapp, tmp_path):
@@ -750,35 +826,3 @@ def test_eigene_schriften_werden_geladen(qapp):
     from PySide6.QtGui import QFontDatabase
     assert "Figtree" in QFontDatabase.families() and "EB Garamond" in QFontDatabase.families()
     assert (fonts.FONT_DIR / "OFL-Figtree.txt").exists() and (fonts.FONT_DIR / "OFL-EBGaramond.txt").exists()
-
-
-def test_flow_bar_ist_ueberall_treffbar_kein_flimmern(qapp):
-    """Der Zwischenraum zwischen den Kapseln und der Rand sind fast unsichtbar, aber nicht durchsichtig: Sonst
-    reicht Windows Mausklicks dort durch, die Maus 'verlässt' die Blase, und sie flimmert."""
-    from dictum.gui.overlay import HOVER_SIZE, IDLE_SIZE, hover_rects
-
-    overlay = Overlay(flow_bar=True)
-    idle = overlay._pill.grab().toImage()
-    assert idle.width() >= IDLE_SIZE[0] - 1
-    for x, y in ((2, 2), (idle.width() // 2, 2), (2, idle.height() - 3), (idle.width() - 3, idle.height() - 3)):
-        assert idle.pixelColor(x, y).alpha() >= 1                # auch ganz außen, abseits des Strichs
-
-    overlay._on_hover(True)
-    img = overlay._pill.grab().toImage()
-    rects = hover_rects()
-    gap = (rects["dictate"].right() + rects["meeting"].left()) / 2     # Mitte zwischen den Kapseln
-    assert img.pixelColor(int(gap), HOVER_SIZE[1] // 2).alpha() >= 1
-    assert img.pixelColor(1, 1).alpha() >= 1
-
-
-def test_flow_bar_hover_fenster_umschliesst_den_ruhestrich(qapp):
-    """Von jeder Stelle des Strichs führt die Maus ohne Lücke zu beiden Kapseln: Das Hover-Fenster ist
-    mindestens so groß wie die Fläche des Ruhestrichs und sitzt auf derselben Mitte und Unterkante."""
-    from dictum.gui.overlay import HOVER_SIZE, IDLE_SIZE
-
-    assert HOVER_SIZE[0] >= IDLE_SIZE[0] and HOVER_SIZE[1] >= IDLE_SIZE[1]
-    overlay = Overlay(flow_bar=True)
-    idle = overlay._pill.geometry()
-    overlay._on_hover(True)
-    hover = overlay._pill.geometry()
-    assert hover.contains(idle)
