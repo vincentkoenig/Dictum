@@ -26,12 +26,67 @@ hochauflösenden Displays von selbst: Alle Größen sind "logische" Pixel.
 
 from __future__ import annotations
 
+import ctypes
+import ctypes.wintypes as wt
+import logging
+import sys
+import time
+
 from PySide6.QtCore import QObject, QPointF, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QCursor, QFont, QGuiApplication, QPainter, QPen
 from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from .icons import nav_icon
 from .labels import TEMPLATE_LABELS
+
+log = logging.getLogger(__name__)
+
+# --- Immer ganz oben bleiben (Windows) -------------------------------------------------------------
+#
+# "Immer im Vordergrund" (WS_EX_TOPMOST) garantiert nicht, dass die Blase wirklich oben liegt: Nach einem
+# Neustart, Bildschirmwechsel oder einer Windows-Aktualisierung kann sie trotz gesetzter Eigenschaft unter
+# normalen Fenstern landen (gemessen: unter zwei maximierten Fenstern). Sie ist dann unsichtbar, obwohl sie
+# da ist. Deshalb prüft das Overlay jede Sekunde die Reihenfolge und setzt sie bei Bedarf neu nach oben.
+
+GW_HWNDPREV, GWL_EXSTYLE, WS_EX_TOPMOST = 3, -20, 0x8
+SWP_NOSIZE, SWP_NOMOVE, SWP_NOACTIVATE = 0x1, 0x2, 0x10
+HWND_TOPMOST = -1
+
+if sys.platform == "win32":
+    _user32 = ctypes.WinDLL("user32", use_last_error=True)
+    # Typen angeben: Handles sind auf 64-Bit-Windows 64 Bit groß, ctypes übergibt sonst nur 32 Bit
+    _user32.SetWindowPos.argtypes = [wt.HWND, wt.HWND, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                                     wt.UINT]
+    _user32.SetWindowPos.restype = wt.BOOL
+    _user32.GetWindow.argtypes = [wt.HWND, wt.UINT]
+    _user32.GetWindow.restype = wt.HWND
+    _user32.IsWindowVisible.argtypes = [wt.HWND]
+    _user32.IsWindowVisible.restype = wt.BOOL
+    _user32.GetWindowLongW.argtypes = [wt.HWND, ctypes.c_int]
+    _user32.GetWindowLongW.restype = ctypes.c_long
+
+
+def _is_buried(hwnd) -> bool:
+    """Liegt ein sichtbares, normales Fenster über diesem? In der gesunden Reihenfolge stehen alle
+    "immer im Vordergrund"-Fenster vor allen normalen, also ist jedes normale davor ein Fehler."""
+    above = _user32.GetWindow(hwnd, GW_HWNDPREV)
+    while above:
+        if _user32.IsWindowVisible(above) and not (_user32.GetWindowLongW(above, GWL_EXSTYLE) & WS_EX_TOPMOST):
+            return True
+        above = _user32.GetWindow(above, GW_HWNDPREV)
+    return False
+
+
+def keep_on_top(widget: QWidget) -> bool:
+    """Setzt das Fenster wieder ganz nach oben, falls es verdeckt liegt (ohne Fokus, ohne Verschieben).
+    Gibt zurück, ob etwas korrigiert wurde. Auf anderen Systemen und im Test (offscreen) tut es nichts."""
+    if sys.platform != "win32" or QGuiApplication.platformName() != "windows" or not widget.isVisible():
+        return False
+    hwnd = wt.HWND(int(widget.winId()))
+    if not _is_buried(hwnd):
+        return False
+    _user32.SetWindowPos(hwnd, wt.HWND(HWND_TOPMOST), 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)
+    return True
 
 # Status → (Symbol, Symbolfarbe, Text)
 STATES = {
@@ -316,6 +371,7 @@ class Overlay(QObject):
         self._status: tuple[str, str, str] | None = None   # (Symbol, Farbe, Text) oder None
         self._status_key = ""                              # "listening" usw. (für den Klick)
         self._hover = False
+        self._last_buried_log = float("-inf")              # wann zuletzt "lag verdeckt" ins Log kam
         self._hide_timer = QTimer(self)
         self._hide_timer.setSingleShot(True)
         self._hide_timer.timeout.connect(self._hide_now)
@@ -323,6 +379,18 @@ class Overlay(QObject):
         self._poll_timer = QTimer(self)
         self._poll_timer.setInterval(POLL_MS)
         self._poll_timer.timeout.connect(self._poll)
+        # Jede Sekunde: liegt die Blase noch ganz oben und am richtigen Platz? (siehe keep_on_top)
+        self._guard_timer = QTimer(self)
+        self._guard_timer.setInterval(1000)
+        self._guard_timer.timeout.connect(self._guard)
+        if poll:
+            self._guard_timer.start()
+        # Bildschirm angeschlossen/abgezogen oder Hauptbildschirm gewechselt (beim Anmelden normal): neu platzieren
+        app = QGuiApplication.instance()
+        if app is not None and poll:
+            app.primaryScreenChanged.connect(lambda *_: self._guard())
+            app.screenAdded.connect(lambda *_: self._guard())
+            app.screenRemoved.connect(lambda *_: self._guard())
         # Signale → Slots: Aufrufe aus fremden Threads laufen so im Hauptthread
         self._sig_show.connect(self._on_show)
         self._sig_flash.connect(self._on_flash)
@@ -438,6 +506,18 @@ class Overlay(QObject):
         self._place()
         self._pill.show()
         self._pill.update()
+        self._guard()
+
+    def _guard(self) -> None:
+        """Blase wieder an ihren Platz und nach oben setzen, falls Windows sie verschoben oder verdeckt hat."""
+        if not self._pill.isVisible():
+            return
+        self._place()
+        buried = [name for name, widget in (("Blase", self._pill), ("Karte", self._card), ("Hinweis", self._tip))
+                  if keep_on_top(widget)]
+        if buried and time.monotonic() - self._last_buried_log > 60:  # höchstens eine Meldung pro Minute
+            self._last_buried_log = time.monotonic()
+            log.info("Flow Bar lag unter anderen Fenstern (%s) – wieder nach oben gesetzt", ", ".join(buried))
 
     # --- Hinweis und Karte ------------------------------------------------------------
 

@@ -587,6 +587,17 @@ aus, ob die Maus im Aufklapp-Bereich ist. Das braucht keine Treffer des Fensters
   verlässt. Mit offener Karte zählen Karte und Blase zusammen.
 - **Klicks:** Die Kapseln sind undurchsichtig gemalt und bekommen normale Mausklicks.
 
+**Immer ganz oben (die Wache):** „Immer im Vordergrund“ (`WS_EX_TOPMOST`) reicht unter Windows nicht aus. Nach einem
+Neustart lag die Blase trotz gesetzter Eigenschaft in der Stapelreihenfolge **unter** zwei maximierten Fenstern. Sie lief,
+reagierte auf die Maus und war trotzdem unsichtbar, bis man sie zufällig traf. Deshalb prüft `Overlay._guard()` jede Sekunde
+(und bei jedem Bildschirmwechsel) mit `GetWindow(GW_HWNDPREV)`, ob ein sichtbares normales Fenster über der Blase liegt. In einer
+gesunden Reihenfolge stehen alle „immer im Vordergrund“-Fenster vor allen normalen, jedes normale davor ist also ein Fehler.
+Dann setzt `keep_on_top()` die Blase mit `SetWindowPos(HWND_TOPMOST, SWP_NOACTIVATE)` wieder nach oben, ohne Fokus und ohne
+Verschieben. Andere „immer oben“-Fenster stören das nicht, nur normale Fenster lösen die Korrektur aus. Dieselbe Wache setzt
+die Blase auch an ihre Stelle zurück, falls ein Bildschirm an- oder abgesteckt wurde. Im Log steht dann einmal pro Minute
+„Flow Bar lag unter anderen Fenstern“. Außerdem protokolliert Dictum jetzt „Aufnahme gestartet“ und „Aufnahme beendet“, damit sich
+später ablesen lässt, ob ein Tastendruck wirklich bei Dictum angekommen ist.
+
 Zwei gleichzeitig laufende Blasen an derselben Stelle (z. B. Wispr Flow und Dictum) stören sich gegenseitig.
 
 Die Blase ist der Flow Bar von Wispr Flow nachempfunden (Kapseln, Hinweis über dem Knopf, kleine Karte beim Pfeil; die Karte zeigt

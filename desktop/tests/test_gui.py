@@ -802,6 +802,32 @@ def test_flow_bar_hover_fenster_umschliesst_den_ruhestrich(qapp):
     assert overlay._pill.geometry().contains(idle)
 
 
+def test_flow_bar_wird_bei_verdeckung_wieder_nach_oben_gesetzt(qapp, monkeypatch):
+    """Windows kann die Blase trotz "immer im Vordergrund" unter normale Fenster legen (gemessen nach einem
+    Neustart). Dann ist sie unsichtbar. Die Wache (jede Sekunde) setzt sie wieder nach oben."""
+    from dictum.gui import overlay as overlay_module
+
+    overlay = Overlay(flow_bar=True)
+    raised = []
+    monkeypatch.setattr(overlay_module, "keep_on_top", lambda widget: raised.append(widget) or True)
+    overlay._guard()
+    assert overlay._pill in raised                             # die Blase selbst wird geprüft und angehoben
+    overlay._card.show()
+    raised.clear()
+    overlay._guard()
+    assert overlay._card in raised                             # auch Karte und Hinweis, wenn sie offen sind
+
+    monkeypatch.undo()
+    assert overlay_module.keep_on_top(overlay._pill) is False  # im Test (offscreen) gibt es nichts zu korrigieren
+
+
+def test_flow_bar_wache_platziert_neu_nach_bildschirmwechsel(qapp):
+    overlay = Overlay(flow_bar=True)
+    overlay._pill.move(5, 5)                                   # Windows hat sie verschoben (z. B. anderer Bildschirm)
+    overlay._guard()
+    assert overlay._pill.pos().x() > 100                       # wieder mittig unten
+
+
 def test_flow_bar_und_ton_einstellungen_werden_gespeichert(app, qapp, tmp_path):
     path = tmp_path / "settings.toml"
     shutil.copy(DEFAULT_PATH, path)

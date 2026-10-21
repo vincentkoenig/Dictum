@@ -350,6 +350,8 @@ class DictumApp:
             log.exception("Mikrofon konnte nicht geöffnet werden")
             self.overlay.flash("Kein Mikrofon gefunden")
             return
+        # Im Log, damit man später sieht, ob Dictum bei einem Tastendruck wirklich aufgenommen hat
+        log.info("Aufnahme gestartet (Ton %s)", "an" if self.settings.feedback.sounds else "aus")
         self._beep(880)
         self.overlay.show("listening")
         self._arm_limit()
@@ -377,6 +379,7 @@ class DictumApp:
     def _stop(self) -> None:
         self._disarm_limit()
         audio = self.recorder.stop()
+        log.info("Aufnahme beendet")
         self._beep(660)
         ready = self.engine == "openai" or self.local.is_ready
         self.overlay.show("transcribing" if ready else "loading")
