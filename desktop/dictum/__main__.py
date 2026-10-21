@@ -3,6 +3,7 @@
 import argparse
 import ctypes
 import logging
+import os
 import sys
 
 from . import autostart
@@ -18,13 +19,23 @@ def _breadcrumb(text: str) -> None:
     sehen, ob Windows Dictum beim Anmelden überhaupt gestartet hat und wie weit es kam. Die Datei behält
     die letzten 200 Zeilen."""
     try:
+        import time
         from datetime import datetime
 
         path = DESKTOP_DIR / "start.log"
         path.parent.mkdir(parents=True, exist_ok=True)
-        lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
-        lines.append(f"{datetime.now():%Y-%m-%d %H:%M:%S}  {text}")
-        path.write_text("\n".join(lines[-200:]) + "\n", encoding="utf-8")
+        # Nur anhängen, nie lesen und neu schreiben: Beim Anmelden starten zwei Wege (Run-Eintrag und Startordner)
+        # gleichzeitig, und mit Lesen+Schreiben überschrieb einer die Zeile des anderen (beobachtet).
+        for attempt in range(5):
+            try:
+                with open(path, "a", encoding="utf-8") as f:
+                    f.write(f"{datetime.now():%Y-%m-%d %H:%M:%S}  pid {os.getpid()}  {text}\n")
+                break
+            except OSError:
+                time.sleep(0.2 * (attempt + 1))  # kurz gesperrt (Virenscanner o. Ä.): später nochmal
+        if path.stat().st_size > 50_000:  # selten: auf die letzten 200 Zeilen kürzen
+            lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+            path.write_text("\n".join(lines[-200:]) + "\n", encoding="utf-8")
     except Exception:
         pass  # Diagnose darf den Start nie verhindern
 

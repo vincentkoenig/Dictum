@@ -598,6 +598,12 @@ die Blase auch an ihre Stelle zurück, falls ein Bildschirm an- oder abgesteckt 
 „Flow Bar lag unter anderen Fenstern“. Außerdem protokolliert Dictum jetzt „Aufnahme gestartet“ und „Aufnahme beendet“, damit sich
 später ablesen lässt, ob ein Tastendruck wirklich bei Dictum angekommen ist.
 
+**Start-Diagnose (`start.log`):** Ganz am Anfang jedes Starts hängt Dictum eine Zeile mit Uhrzeit, Prozessnummer und Startart an
+`%APPDATA%\Dictum\start.log` (`__main__._breadcrumb`). So sieht man nach einem Neustart, ob Windows Dictum gestartet hat und
+über welchen Weg (Run-Eintrag und Startordner starten beim Anmelden gleichzeitig, der zweite beendet sich sofort). Die Zeile wird
+nur angehängt, nie gelesen und neu geschrieben: Das frühere Lesen und Neuschreiben ließ zwei gleichzeitige Starts ihre Zeilen
+gegenseitig überschreiben.
+
 Zwei gleichzeitig laufende Blasen an derselben Stelle (z. B. Wispr Flow und Dictum) stören sich gegenseitig.
 
 Die Blase ist der Flow Bar von Wispr Flow nachempfunden (Kapseln, Hinweis über dem Knopf, kleine Karte beim Pfeil; die Karte zeigt
