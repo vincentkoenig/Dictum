@@ -108,7 +108,7 @@ def clean_text(raw: str, provider: LLMProvider, dictionary: list[str] | None = N
     try:
         cleaned = provider.complete(
             system=build_system_prompt(dictionary or [], style, context),
-            user=f"<transkript>\n{raw}\n</transkript>",
+            user=f"<transkript>\n{raw}\n</transkript>\n\nGib nur das bereinigte Transkript aus.",
         )
     except LLMError as e:
         log.warning("KI-Bereinigung übersprungen: %s", e)

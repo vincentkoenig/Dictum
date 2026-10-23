@@ -31,7 +31,7 @@ def test_transkript_wird_in_tags_uebergeben():
     p = FakeProvider("Hallo.")
     clean_text("hallo", p)
     _, user = p.calls[0]
-    assert user == "<transkript>\nhallo\n</transkript>"
+    assert user == "<transkript>\nhallo\n</transkript>\n\nGib nur das bereinigte Transkript aus."
 
 
 def test_bei_fehler_kommt_der_rohtext():

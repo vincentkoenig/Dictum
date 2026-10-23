@@ -459,7 +459,7 @@ class DictumApp:
         log.info("Fertig: Erkennung %.1f s · Bereinigung %.1f s → %r", t1 - t0, t2 - t1, text)
         self.overlay.hide()
         self._last_text = text
-        insert_text(text)
+        insert_text(text, target)
         self._remember(raw, text, audio, cleaned, snippet is not None, target)
         self._learn_async(text, target)
 
@@ -480,7 +480,7 @@ class DictumApp:
         log.info("Command Mode: %r auf %d Zeichen → %d Zeichen", instruction, len(selection), len(result))
         self.overlay.hide()
         self._last_text = result
-        insert_text(result)  # ersetzt die Markierung (oder landet an der Schreibstelle)
+        insert_text(result, target)  # ersetzt die Markierung (oder landet an der Schreibstelle)
         self._remember(instruction, result, audio, True, False, target)
 
     def _learn_async(self, text: str, target: context.ActiveWindow | None) -> None:

@@ -98,7 +98,7 @@ def make_app(monkeypatch, provider, selection="Alter Text.", instruction="mach d
 
     inserted = []
     monkeypatch.setattr(app_module, "copy_selection", lambda: selection)
-    monkeypatch.setattr(app_module, "insert_text", inserted.append)
+    monkeypatch.setattr(app_module, "insert_text", lambda text, target=None: inserted.append(text))
     monkeypatch.setattr(app_module, "load_dictionary", lambda: [])
     app = app_module.DictumApp.__new__(app_module.DictumApp)
     app.overlay, app.provider, app._last_text = Overlay(), provider, ""

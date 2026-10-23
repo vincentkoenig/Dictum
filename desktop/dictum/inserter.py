@@ -20,7 +20,7 @@ import uuid
 
 from pynput import keyboard
 
-from . import clipboard
+from . import clipboard, context
 
 log = logging.getLogger(__name__)
 
@@ -61,9 +61,29 @@ def copy_selection(timeout: float = 0.6) -> str:
     return selection
 
 
-def insert_text(text: str) -> None:
+def _restore_focus(target: context.ActiveWindow | None) -> None:
+    """Das Fenster, in dem diktiert wurde, wieder nach vorn holen, falls ein anderes den Fokus hat.
+
+    Während der Erkennung kann etwas dazwischenfunken (Benachrichtigung, anderes Programm). Ohne diesen
+    Schritt landet der Text im falschen Fenster.
+    """
+    if target is None or not target.hwnd:
+        return
+    try:
+        import win32gui
+
+        if win32gui.GetForegroundWindow() == target.hwnd or not win32gui.IsWindow(target.hwnd):
+            return
+        win32gui.SetForegroundWindow(target.hwnd)
+        time.sleep(0.1)
+    except Exception:
+        log.debug("Fokus konnte nicht zurückgeholt werden", exc_info=True)
+
+
+def insert_text(text: str, target: context.ActiveWindow | None = None) -> None:
     if not text:
         return
+    _restore_focus(target)
     previous = clipboard.snapshot()
     try:
         clipboard.set_text(text)
@@ -71,8 +91,14 @@ def insert_text(text: str) -> None:
         log.warning("Zwischenablage belegt – Text nicht eingefügt")
         return
     time.sleep(_BEFORE_PASTE)
+    # Klassische Terminals fügen erst mit Strg+Shift+V ein
+    shift = context.is_terminal(target if target is not None else context.active_window())
     with _controller.pressed(keyboard.Key.ctrl):
-        _controller.tap("v")
+        if shift:
+            with _controller.pressed(keyboard.Key.shift):
+                _controller.tap("v")
+        else:
+            _controller.tap("v")
     time.sleep(_AFTER_PASTE)
 
     clipboard.restore(previous)

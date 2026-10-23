@@ -37,6 +37,8 @@ FRIENDLY = {
 class ActiveWindow:
     exe: str      # z. B. "chrome" (ohne .exe, klein)
     title: str    # Fenstertitel
+    hwnd: int = 0         # Fenster-Handle, um den Fokus vor dem Einfügen zurückzuholen
+    window_class: str = ""  # Fensterklasse, daran erkennt man klassische Terminals
 
     @property
     def app(self) -> str:
@@ -46,6 +48,21 @@ class ActiveWindow:
         return FRIENDLY.get(self.exe, self.exe[:1].upper() + self.exe[1:])
 
 
+# Terminals, in denen Strg+V nicht einfügt, sondern Strg+Shift+V nötig ist (Liste von OpenWhispr)
+TERMINAL_CLASSES = {
+    "consolewindowclass", "cascadia_hosting_window_class", "mintty", "virtualconsoleclass", "putty",
+    "alacritty", "org.wezfurlong.wezterm", "hyper", "tmobaxterm", "kitty",
+}
+# Terminals auf Electron-Basis haben die Klasse "Chrome_WidgetWin_1", die erkennt man am Programmnamen
+TERMINAL_EXES = {"termius", "tabby", "wave", "rio"}
+
+
+def is_terminal(window: "ActiveWindow | None") -> bool:
+    if window is None:
+        return False
+    return window.window_class.lower() in TERMINAL_CLASSES or window.exe in TERMINAL_EXES
+
+
 def active_window() -> ActiveWindow | None:
     """Das Fenster im Vordergrund oder None (z. B. beim Wechsel zwischen Fenstern)."""
     try:
@@ -53,6 +70,7 @@ def active_window() -> ActiveWindow | None:
         if not hwnd:
             return None
         title = win32gui.GetWindowText(hwnd)
+        window_class = win32gui.GetClassName(hwnd)
         _thread, pid = win32process.GetWindowThreadProcessId(hwnd)
     except Exception:
         log.debug("Vordergrundfenster nicht lesbar", exc_info=True)
@@ -63,7 +81,7 @@ def active_window() -> ActiveWindow | None:
         exe = name[:-4].lower() if name.lower().endswith(".exe") else name.lower()
     except (psutil.Error, OSError):
         pass  # z. B. Zugriff verweigert bei Programmen mit Administratorrechten
-    return ActiveWindow(exe=exe, title=title)
+    return ActiveWindow(exe=exe, title=title, hwnd=hwnd, window_class=window_class)
 
 
 FIELD_TEXT_TIMEOUT = 1.5  # Sekunden: Manche Programme beantworten UI-Automation sehr langsam
