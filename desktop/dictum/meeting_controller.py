@@ -24,6 +24,7 @@ import webbrowser
 from typing import Callable
 
 import numpy as np
+import requests
 
 from .cloud import CloudError, DictumCloud
 from .config import Settings
@@ -158,7 +159,7 @@ class MeetingController:
             self._wake.clear()
             try:
                 self._tick()
-            except CloudError as e:
+            except (CloudError, requests.RequestException) as e:  # z. B. offline: später nochmal
                 log.warning("Cloud nicht erreichbar: %s", e)
                 self._cloud = None  # beim nächsten Mal neu einloggen
             except Exception:
