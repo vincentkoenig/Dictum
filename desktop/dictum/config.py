@@ -103,6 +103,10 @@ class MeetingSettings:
     system_gain: float = 0.8
     sync_minutes: float = 15
     web_url: str = "https://vincentkoenig.github.io/Dictum/"
+    auto_detect: bool = False       # erkennen, wann ein Meeting beginnt, und nachfragen (meeting_detect.py)
+    detect_seconds: float = 10      # so lange muss ein Programm das Mikrofon am Stück belegen
+    detect_apps: list[str] = field(default_factory=lambda: [
+        "teams", "zoom", "webex", "slack", "discord", "skype", "whatsapp", "chrome", "msedge", "firefox"])
 
 
 @dataclass

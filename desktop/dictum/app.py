@@ -53,6 +53,7 @@ from .inserter import copy_selection, insert_text
 from .llm import LLMError, create_provider
 from .logsetup import LOG_PATH
 from .meeting_controller import MeetingController
+from .meeting_detect import MeetingDetector
 from .transcriber import LocalTranscriber
 from .vocabulary import (
     DICTIONARY_PATH,
@@ -139,6 +140,9 @@ class DictumApp:
             notify=lambda title, text, click=None: self.tray.notify(title, text, click),
             on_change=self._refresh_tray,
         )
+        m = settings.meeting
+        self.detector = MeetingDetector(m.detect_apps, m.detect_seconds)
+        self._detect_ticks = 0
         self._bus = _Bus()
         self.tray = Tray(self, self.hotkey_text, open_window=self.show_window)
         self.window = MainWindow(self)
@@ -350,6 +354,34 @@ class DictumApp:
         # Modell nach Leerlauf freigeben (Standard: nie). Mit einer Aufnahme in Arbeit passiert nichts.
         if not self.recorder.is_recording:
             self.local.unload_if_idle(self.settings.transcription.unload_after_minutes)
+        self._detect_meeting()
+
+    DETECT_EVERY = 5  # Ticks (= Sekunden) zwischen zwei Blicken auf die Mikrofon-Nutzung
+
+    def _detect_meeting(self) -> None:
+        """Meeting erkannt? Dann nachfragen (nie von selbst aufnehmen, siehe meeting_detect.py)."""
+        m = self.settings.meeting
+        if not m.auto_detect:
+            return
+        self._detect_ticks += 1
+        if self._detect_ticks % self.DETECT_EVERY:
+            return
+        self.detector.apps, self.detector.seconds = m.detect_apps, m.detect_seconds  # Einstellungen sofort gültig
+        found = self.detector.poll(self.meetings.is_recording)
+        if found is None:
+            return
+        if found.kind == "start":
+            self.tray.notify(
+                f"Meeting mit {found.app}?",
+                "Klicke hier, um die Aufnahme zu starten. Nur mit Einwilligung aller Beteiligten aufnehmen.",
+                lambda: self.meetings.start("meeting"),
+            )
+        else:
+            self.tray.notify(
+                f"{found.app} nutzt das Mikrofon nicht mehr",
+                "Klicke hier, um die Meeting-Aufnahme zu beenden.",
+                self.meetings.stop,
+            )
 
     # --- Hotkey-Ereignisse (laufen im pynput-Thread, müssen schnell sein) ------------
 

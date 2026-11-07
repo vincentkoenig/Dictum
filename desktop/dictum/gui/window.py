@@ -594,6 +594,9 @@ class SettingsTab(QWidget):
         self.theme = QComboBox()
         _fill(self.theme, THEME_LABELS)
         self.sys_audio = QCheckBox("PC-Ton aufnehmen (Teams, Zoom …)")
+        self.auto_detect = QCheckBox("Meetings erkennen und nachfragen, ob aufgenommen werden soll")
+        self.auto_detect.setToolTip("Benutzt Teams, Zoom, der Browser u. a. das Mikrofon, erscheint eine "
+                                    "Benachrichtigung. Aufgenommen wird erst nach einem Klick darauf, nie von selbst.")
         self.chunk = QSpinBox()
         self.chunk.setRange(1, 10)
         self.chunk.setSuffix(" min")
@@ -662,6 +665,7 @@ class SettingsTab(QWidget):
         meeting = QWidget()
         mform = QFormLayout(meeting)
         mform.addRow(self.sys_audio)
+        mform.addRow(self.auto_detect)
         mform.addRow("Stücklänge:", self.chunk)
 
         pages = [("Allgemein", allgemein), ("Erkennung & KI", erkennung), ("Schlüssel", keys),
@@ -729,6 +733,7 @@ class SettingsTab(QWidget):
         self.flow_bar.setChecked(s.ui.flow_bar)
         _select(self.theme, s.ui.theme)
         self.sys_audio.setChecked(s.meeting.include_system_audio)
+        self.auto_detect.setChecked(s.meeting.auto_detect)
         self.chunk.setValue(int(s.meeting.chunk_minutes))
         self.history_on.setChecked(s.history.enabled)
         self.keep_days.setValue(int(s.history.keep_days))
@@ -772,7 +777,10 @@ class SettingsTab(QWidget):
                 "enabled": self.cleanup.isChecked(), "provider": self.provider.currentData(),
                 "openai_model": self.openai_cleanup.currentData(),
             },
-            "meeting": {"include_system_audio": self.sys_audio.isChecked(), "chunk_minutes": self.chunk.value()},
+            "meeting": {
+                "include_system_audio": self.sys_audio.isChecked(), "chunk_minutes": self.chunk.value(),
+                "auto_detect": self.auto_detect.isChecked(),
+            },
             "history": {
                 "enabled": self.history_on.isChecked(), "keep_days": self.keep_days.value(),
                 "keep_recordings": self.keep_recordings.isChecked(),

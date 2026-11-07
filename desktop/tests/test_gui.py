@@ -911,3 +911,14 @@ def test_einstellungen_aufnahmen_behalten(app, qapp, tmp_path):
     assert tab.save(path=path) is True
     saved = load_settings(path)
     assert saved.history.keep_recordings is True and saved.history.recordings_keep_days == 3
+
+
+def test_einstellungen_meeting_erkennung(app, qapp, tmp_path):
+    path = tmp_path / "settings.toml"
+    shutil.copy(DEFAULT_PATH, path)
+    window = MainWindow(app)
+    tab = window.settings_tab
+    assert not tab.auto_detect.isChecked()
+    tab.auto_detect.setChecked(True)
+    assert tab.save(path=path) is True
+    assert load_settings(path).meeting.auto_detect is True

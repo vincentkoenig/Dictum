@@ -52,6 +52,7 @@ Tippen ist langsam, und fertige Diktier-Dienste schicken jedes Wort an einen fre
 ![Statistik](docs/images/statistik.png)
 
 ### 🗣️ Gespräche aufnehmen und zusammenfassen
+- Optional **Meeting-Erkennung**: Benutzt Teams, Zoom oder der Browser das Mikrofon, fragt Dictum per Benachrichtigung, ob es aufnehmen soll (nie von selbst), und später, ob die Aufnahme enden soll
 - Meetings am PC aufnehmen: **Mikrofon und PC-Ton** (Teams, Zoom, Meet) per WASAPI-Loopback, in Stücken von wenigen Minuten, in Sprechpausen geschnitten
 - Upload nach Supabase, Transkription und **strukturierte Zusammenfassung** (Kernpunkte, To-dos, Entscheidungen, offene Fragen) mit vier Vorlagen: Meeting, Interview, Vorlesung, Notiz
 - **Nichts geht verloren**: Alles liegt erst als Datei in einer Warteschlange und wird bei fehlendem Netz später hochgeladen, auch nach einem Absturz
@@ -145,7 +146,7 @@ Dictum/
 │   │   ├── replacements.py          # feste Ersetzungen („klingt wie“ → Schreibweise)
 │   │   ├── media.py, layout.py      # Ton anderer Programme senken, Sprache nach Tastaturlayout
 │   │   ├── history.py, costs.py     # Verlauf (SQLite), Statistik, Kostenschätzung
-│   │   ├── meeting.py, meeting_controller.py, upload_queue.py, cloud.py  # Meetings und Upload
+│   │   ├── meeting.py, meeting_controller.py, meeting_detect.py, upload_queue.py, cloud.py  # Meetings, Erkennung, Upload
 │   │   ├── config.py, settings_io.py  # settings.toml lesen und mit Kommentaren schreiben
 │   │   ├── autostart.py, shortcuts.py, single_instance.py, logsetup.py   # echtes Programm
 │   │   ├── sounds.py                # sanfte Töne

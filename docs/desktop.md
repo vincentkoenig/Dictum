@@ -321,6 +321,27 @@ Während der Aufnahme ist das Tray-Symbol **rot**, und der Tooltip zeigt die Lau
 beenden** schließt ab. Wenig später meldet eine Windows-Benachrichtigung „Zusammenfassung
 fertig“, und **Letztes Meeting öffnen** zeigt sie in der Web-App.
 
+### Meetings automatisch erkennen (optional, standardmäßig aus)
+
+Mit `[meeting] auto_detect = true` (oder im Fenster: Einstellungen → Meetings) merkt Dictum, wenn ein Meeting
+beginnt, und **fragt per Benachrichtigung nach**. Aufgenommen wird nie von selbst: erst der Klick auf die
+Benachrichtigung startet die Aufnahme.
+
+Technik (`meeting_detect.py`): Windows führt Buch, welches Programm wann das Mikrofon benutzt hat. Die Einträge
+liegen in der Registry unter `HKCU\Software\Microsoft\Windows\CapabilityAccessManager\ConsentStore\microphone`
+(pro Programm `LastUsedTimeStart` und `LastUsedTimeStop`). Ist Start größer als Stopp, hört das Programm gerade zu.
+Das ist dieselbe Quelle wie die Mikrofon-Anzeige in den Windows-Datenschutz-Einstellungen: keine Rechte nötig, und
+Dictum öffnet das Mikrofon dafür nicht (ein zweiter Zugriff könnte sonst die Aufnahme des Meetings stören).
+
+- Es zählen nur Programme aus `detect_apps` (Teile des Programmnamens: Teams, Zoom, Webex, Slack, Discord, Skype,
+  WhatsApp und die Browser für Meet). Dictum selbst steht nicht darin, Diktieren löst also nichts aus.
+- Erst wenn ein Programm das Mikrofon `detect_seconds` (Standard 10) am Stück belegt, kommt die Frage, pro
+  Nutzungsphase nur einmal. Kurze Tests und kurze Anrufe bleiben still.
+- Wurde die Aufnahme über die Frage gestartet und gibt das Programm das Mikrofon 30 Sekunden lang frei, fragt
+  Dictum, ob die Aufnahme beendet werden soll. So bleibt keine Aufnahme versehentlich offen. Eine kurze Pause
+  im Gespräch löst das nicht aus.
+- Der Blick in die Registry passiert alle 5 Sekunden im vorhandenen Sekundentakt der App.
+
 ### Der Weg eines Meetings
 
 ```

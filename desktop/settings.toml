@@ -105,6 +105,14 @@ system_gain = 0.8
 sync_minutes = 15
 # Adresse der Handy-/Web-App – dort werden fertige Meetings geöffnet
 web_url = "https://vincentkoenig.github.io/Dictum/"
+# Meetings erkennen: Benutzt eines der Programme unten das Mikrofon, fragt Dictum per Benachrichtigung, ob es
+# aufnehmen soll (nur ein Klick darauf startet die Aufnahme, nie von selbst). Danach fragt es auch, ob die Aufnahme
+# beendet werden soll, wenn das Programm das Mikrofon freigibt. Aus, solange du es nicht einschaltest.
+auto_detect = false
+# So viele Sekunden am Stück muss ein Programm das Mikrofon belegen, bevor gefragt wird
+detect_seconds = 10
+# Programme (Teil des Programmnamens, Groß-/Kleinschreibung egal). Browser stehen für Meet, Teams im Browser usw.
+detect_apps = ["teams", "zoom", "webex", "slack", "discord", "skype", "whatsapp", "chrome", "msedge", "firefox"]
 
 [history]
 # Lokaler Verlauf deiner Diktate (nur auf diesem PC, nie in der Cloud). Sichtbar im Dictum-Fenster.
