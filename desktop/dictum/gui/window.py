@@ -27,10 +27,11 @@ verändert nie selbst den Zustand der App: Es ruft nur Methoden von `DictumApp` 
 from __future__ import annotations
 
 import os
+import threading
 import time
 from datetime import date, datetime
 
-from PySide6.QtCore import QEvent, QSize, Qt, QTimer
+from PySide6.QtCore import QEvent, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -125,7 +126,12 @@ def friendly_time(moment: datetime, today: date | None = None) -> str:
 # ======================================================================================
 
 class HistoryTab(QWidget):
-    """Verlauf mit Suche. Doppelklick kopiert einen Eintrag."""
+    """Verlauf mit Suche. Doppelklick kopiert einen Eintrag. Ist die Aufnahme noch da, lässt sich der Eintrag
+    "Neu erkennen" (Einstellungen → Aufnahmen behalten)."""
+
+    _retranscribed = Signal(int, str)   # (Eintrag, neuer Text oder "" bei Fehler): vom Hintergrund-Thread ins Fenster
+    AUDIO_ROLE = Qt.ItemDataRole.UserRole + 1
+    ID_ROLE = Qt.ItemDataRole.UserRole + 2
 
     def __init__(self, app) -> None:
         super().__init__()
@@ -153,6 +159,13 @@ class HistoryTab(QWidget):
 
         self.copy_btn = QPushButton("Kopieren")
         self.copy_btn.clicked.connect(self.copy_selected)
+        self.redo_btn = QPushButton("Neu erkennen")
+        self.redo_btn.setToolTip("Erkennt das Diktat aus der gespeicherten Aufnahme noch einmal und legt das Ergebnis "
+                                 "in die Zwischenablage. Nur möglich, wenn die Aufnahme noch da ist.")
+        self.redo_btn.setEnabled(False)
+        self.redo_btn.clicked.connect(self.retranscribe_selected)
+        self._retranscribed.connect(self._on_retranscribed)
+        self.table.itemSelectionChanged.connect(self._update_redo)
         self.clear_btn = QPushButton("Alle löschen …")
         self.clear_btn.clicked.connect(self._clear)
         self.message = _muted(QLabel(
@@ -161,6 +174,7 @@ class HistoryTab(QWidget):
 
         bottom = QHBoxLayout()
         bottom.addWidget(self.copy_btn)
+        bottom.addWidget(self.redo_btn)
         bottom.addWidget(self.clear_btn)
         bottom.addWidget(self.message, 1)
 
@@ -185,9 +199,47 @@ class HistoryTab(QWidget):
         for row, entry in enumerate(entries):
             time_item = QTableWidgetItem(friendly_time(entry.created_at))
             time_item.setData(Qt.ItemDataRole.UserRole, entry.text)
+            time_item.setData(self.AUDIO_ROLE, entry.has_audio)
+            time_item.setData(self.ID_ROLE, entry.id)
             self.table.setItem(row, 0, time_item)
             self.table.setItem(row, 1, QTableWidgetItem(entry.text))
         self.table.resizeRowsToContents()
+        self._update_redo()
+
+    def _update_redo(self) -> None:
+        row = self.table.currentRow()
+        item = self.table.item(row, 0) if row >= 0 else None
+        self.redo_btn.setEnabled(bool(item and item.data(self.AUDIO_ROLE)) and self._busy is False)
+
+    _busy = False
+
+    def retranscribe_selected(self) -> None:
+        row = self.table.currentRow()
+        item = self.table.item(row, 0) if row >= 0 else None
+        if item is None or not item.data(self.AUDIO_ROLE) or self._busy:
+            return
+        entry_id = item.data(self.ID_ROLE)
+        self._busy = True
+        self.redo_btn.setEnabled(False)
+        self.message.setText("Erkenne neu …")
+
+        def work() -> None:
+            try:
+                text = self.app.retranscribe(entry_id)
+            except Exception:
+                text = ""
+            self._retranscribed.emit(entry_id, text)
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _on_retranscribed(self, entry_id: int, text: str) -> None:
+        self._busy = False
+        if text:
+            QGuiApplication.clipboard().setText(text)
+            self.message.setText("Neu erkannt und in die Zwischenablage kopiert.")
+        else:
+            self.message.setText("Neu erkennen hat nichts ergeben (siehe Logdatei).")
+        self.refresh(force=True)
 
     def copy_selected(self) -> None:
         row = self.table.currentRow()
@@ -550,6 +602,12 @@ class SettingsTab(QWidget):
         self.keep_days.setRange(0, 3650)
         self.keep_days.setSuffix(" Tage")
         self.keep_days.setSpecialValueText("nie löschen")
+        self.keep_recordings = QCheckBox("Aufnahmen behalten (zum Neu-Erkennen im Verlauf)")
+        self.keep_recordings.setToolTip("Speichert die Sprachaufnahme jedes Diktats nur auf diesem PC. Standardmäßig aus.")
+        self.recordings_days = QSpinBox()
+        self.recordings_days.setRange(0, 365)
+        self.recordings_days.setSuffix(" Tage")
+        self.recordings_days.setSpecialValueText("nie löschen")
         self.autostart = QCheckBox("Mit Windows starten")
         self.desktop_shortcut = QCheckBox("Symbol auf dem Desktop")
         self.start_menu_shortcut = QCheckBox("Eintrag im Startmenü")
@@ -595,6 +653,8 @@ class SettingsTab(QWidget):
         pform = QFormLayout(privat)
         pform.addRow(self.history_on)
         pform.addRow("Aufbewahren:", self.keep_days)
+        pform.addRow(self.keep_recordings)
+        pform.addRow("Aufnahmen aufbewahren:", self.recordings_days)
         pform.addRow(self.autostart)
         pform.addRow(self.desktop_shortcut)
         pform.addRow(self.start_menu_shortcut)
@@ -672,6 +732,8 @@ class SettingsTab(QWidget):
         self.chunk.setValue(int(s.meeting.chunk_minutes))
         self.history_on.setChecked(s.history.enabled)
         self.keep_days.setValue(int(s.history.keep_days))
+        self.keep_recordings.setChecked(s.history.keep_recordings)
+        self.recordings_days.setValue(int(s.history.recordings_keep_days))
         self.autostart.setChecked(bool(app.get("autostart")))
         self.desktop_shortcut.setChecked(bool(app.get("desktop_shortcut")))
         self.start_menu_shortcut.setChecked(bool(app.get("start_menu_shortcut")))
@@ -711,7 +773,11 @@ class SettingsTab(QWidget):
                 "openai_model": self.openai_cleanup.currentData(),
             },
             "meeting": {"include_system_audio": self.sys_audio.isChecked(), "chunk_minutes": self.chunk.value()},
-            "history": {"enabled": self.history_on.isChecked(), "keep_days": self.keep_days.value()},
+            "history": {
+                "enabled": self.history_on.isChecked(), "keep_days": self.keep_days.value(),
+                "keep_recordings": self.keep_recordings.isChecked(),
+                "recordings_keep_days": self.recordings_days.value(),
+            },
             "feedback": {"sounds": self.sounds.isChecked(), "sound_volume": self.sound_volume.value()},
             "ui": {"flow_bar": self.flow_bar.isChecked(), "theme": self.theme.currentData()},
         }

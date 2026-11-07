@@ -509,6 +509,16 @@ und erscheint nicht in der Handy-App. Man kann ihn komplett abschalten (`[histor
 die Aufbewahrung begrenzen (`keep_days`, Standard 90 Tage, ältere Einträge löscht Dictum beim Start)
 oder im Fenster alles löschen.
 
+**Aufnahmen behalten und neu erkennen (optional, standardmäßig aus):** Mit `[history] keep_recordings = true`
+speichert Dictum die Sprachaufnahme jedes Diktats in `data/recordings/<Nummer>.wav` (16-Bit, mono, 16 kHz,
+knapp 2 MB pro Minute, siehe `recordings.py`). Im Verlauf gibt es dann für Einträge mit Aufnahme den Knopf
+„Neu erkennen“: `DictumApp.retranscribe()` lässt das Audio wie ein normales Diktat laufen (aktuelle Engine,
+Wörterbuch, feste Ersetzungen, Bereinigung mit dem Standardstil), ersetzt den Verlaufseintrag und legt das
+Ergebnis in die Zwischenablage. Eingefügt wird nichts, weil beim Klick Dictum selbst im Vordergrund ist.
+Nützlich, wenn die Cloud einen Satz verhunzt hat oder ein Wort inzwischen im Wörterbuch steht. Aufnahmen sind
+Sprachdaten und bleiben nur auf diesem PC: `recordings_keep_days` (Standard 7, 0 = nie) löscht sie beim Start,
+ebenso verschwinden sie mit ihrem Eintrag (Aufbewahrung, „Alle löschen“).
+
 Ein Detail aus der Praxis: Die Suche nutzt SQL `LIKE`, bei dem `%` und `_` Platzhalter sind. Sucht
 man nach „50%“, würde sonst alles gefunden. `history.py` entwertet diese Zeichen mit `\`.
 

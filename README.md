@@ -44,7 +44,7 @@ Tippen ist langsam, und fertige Diktier-Dienste schicken jedes Wort an einen fre
 
 ### 🖥️ Das Fenster
 - Seitenleiste mit **Diktat**, **Meetings**, **Statistik**, **Wörterbuch**, **Textbausteinen**, **Stilen** und einem **Notizblock** zum Ausprobieren
-- **Verlauf** mit Suche, den man lokal speichern, begrenzen oder ausschalten kann
+- **Verlauf** mit Suche, den man lokal speichern, begrenzen oder ausschalten kann. Optional bleiben die Aufnahmen einige Tage erhalten, damit sich ein Diktat per Knopf **neu erkennen** lässt
 - **Statistik**: Tempo (Wörter pro Minute), gesparte Zeit gegenüber Tippen, Wörter, Nutzung nach Programmart, Kalender der Serie, geschätzte Cloud-Kosten
 - Hell, Dunkel oder wie Windows. Fenster ohne Windows-Titelleiste, eigene Schriften (Figtree und EB Garamond, wie bei Wispr Flow)
 - Einstellungen als Dialog, Tray-Symbol, Autostart, Desktop-Symbol und Startmenü-Eintrag
@@ -120,7 +120,7 @@ Ausführlich: [docs/ARCHITEKTUR.md](docs/ARCHITEKTUR.md) · Fachbegriffe: [docs/
 - **Austauschbare Anbieter**: Erkennung lokal oder bei OpenAI, Bereinigung bei Claude oder OpenAI, alles zur Laufzeit umschaltbar. Eine gemeinsame Schnittstelle (`llm/`) hält den Rest des Codes unabhängig vom Anbieter
 - **Hotkey-Logik ohne Tastatur**: Eine Zustandsmaschine (Halten, Antippen, Abbrechen, Zeitlimit) kennt die echte Tastatur nicht und ist deshalb mit Tests prüfbar. Der Command Mode benutzt dieselbe Maschine mit eigener Taste
 - **Ein Stil ändert nur die Schreibweise**: So bleibt die Regel „nichts hinzufügen, nichts weglassen“ der Bereinigung bestehen
-- **Datenschutz zuerst**: Kontext und Lern-Wörterbuch lesen Textfelder nur auf Wunsch, Passwortfelder nie, und Audio wird nicht gespeichert. Der Verlauf liegt in einer lokalen SQLite-Datei
+- **Datenschutz zuerst**: Kontext und Lern-Wörterbuch lesen Textfelder nur auf Wunsch, Passwortfelder nie, und Audio wird nicht gespeichert (außer du schaltest „Aufnahmen behalten“ ein, dann nur lokal und nur einige Tage). Der Verlauf liegt in einer lokalen SQLite-Datei
 - **Erst speichern, dann hochladen**: Meetings und Handy-Aufnahmen liegen zuerst als Datei in einer Warteschlange. Netzausfall, App-Absturz oder Neustart verlieren nichts
 - **Eine Oberfläche für Handy und Browser**: Neue Funktionen der Web-App stehen sofort überall zur Verfügung, die Android-Hülle liefert nur, was ein Browser nicht kann (Aufnahme bei gesperrtem Bildschirm)
 - **Persönliche Dateien getrennt vom Programm**: Als `.exe` liegen Einstellungen, Wörterbuch, Verlauf und Schlüssel in `%APPDATA%\Dictum`, damit ein Update das Programm einfach ersetzen kann

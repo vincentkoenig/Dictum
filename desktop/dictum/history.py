@@ -22,6 +22,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from .config import DESKTOP_DIR
+from .recordings import Recordings
 
 DB_PATH = DESKTOP_DIR / "data" / "history.db"
 
@@ -77,6 +78,7 @@ class Entry:
     text: str
     duration: float | None
     words: int
+    has_audio: bool = False  # Aufnahme noch vorhanden → "Neu erkennen" möglich
 
 
 def _now() -> str:
@@ -90,6 +92,7 @@ def _to_local(iso: str) -> datetime:
 class History:
     def __init__(self, path: Path = DB_PATH) -> None:
         self.path = path
+        self.recordings = Recordings(path.parent / "recordings")
         path.parent.mkdir(parents=True, exist_ok=True)
         with closing(self._connect()) as db:
             db.executescript(SCHEMA)
@@ -105,15 +108,17 @@ class History:
 
     def add(self, raw: str, text: str, duration: float | None = None, engine: str = "",
             cleaned: bool = False, snippet: bool = False, app: str = "", cost: float | None = None,
-            group: str = "") -> None:
+            group: str = "") -> int:
+        """Speichert ein Diktat und gibt seine Nummer zurück (die Aufnahme heißt danach)."""
         words = len(text.split())
         with closing(self._connect()) as db, db:  # "with db" = Transaktion, committet am Ende
-            db.execute(
+            cursor = db.execute(
                 "insert into dictations (created_at, raw, text, duration, engine, cleaned, snippet, words, app, cost, grp) "
                 "values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (_now(), raw, text, duration, engine, int(cleaned), int(snippet), words, app or None, cost,
                  group or None),
             )
+            return cursor.lastrowid
 
     def recent(self, limit: int = 200, query: str = "") -> list[Entry]:
         sql = "select id, created_at, raw, text, duration, words from dictations"
@@ -127,12 +132,21 @@ class History:
         params.append(limit)
         with closing(self._connect()) as db:
             rows = db.execute(sql, params).fetchall()
-        return [Entry(r["id"], _to_local(r["created_at"]), r["raw"], r["text"], r["duration"], r["words"])
+        return [Entry(r["id"], _to_local(r["created_at"]), r["raw"], r["text"], r["duration"], r["words"],
+                      self.recordings.exists(r["id"]))
                 for r in rows]
+
+    def update_text(self, entry_id: int, raw: str, text: str) -> None:
+        """Nach "Neu erkennen": den Eintrag durch das neue Ergebnis ersetzen."""
+        with closing(self._connect()) as db, db:
+            db.execute("update dictations set raw = ?, text = ?, words = ? where id = ?",
+                       (raw, text, len(text.split()), entry_id))
 
     def delete_all(self) -> int:
         with closing(self._connect()) as db, db:
-            return db.execute("delete from dictations").rowcount
+            count = db.execute("delete from dictations").rowcount
+        self.recordings.delete_all()
+        return count
 
     def purge(self, keep_days: int) -> int:
         """Löscht Einträge, die älter als `keep_days` sind. 0 = nie löschen."""
@@ -140,7 +154,11 @@ class History:
             return 0
         cutoff = (datetime.now(timezone.utc) - timedelta(days=keep_days)).isoformat(timespec="seconds")
         with closing(self._connect()) as db, db:
-            return db.execute("delete from dictations where created_at < ?", (cutoff,)).rowcount
+            old = [row["id"] for row in db.execute("select id from dictations where created_at < ?", (cutoff,))]
+            db.execute("delete from dictations where created_at < ?", (cutoff,))
+        for entry_id in old:
+            self.recordings.delete(entry_id)
+        return len(old)
 
     def today(self) -> tuple[int, int]:
         """(Anzahl Diktate, Anzahl Wörter) seit Mitternacht lokaler Zeit."""

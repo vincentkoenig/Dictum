@@ -109,6 +109,8 @@ class MeetingSettings:
 class HistorySettings:
     enabled: bool = True
     keep_days: int = 90
+    keep_recordings: bool = False   # Aufnahmen behalten, damit man ein Diktat neu erkennen lassen kann (recordings.py)
+    recordings_keep_days: int = 7   # so lange bleiben die Aufnahmen (0 = nie löschen)
 
 
 @dataclass

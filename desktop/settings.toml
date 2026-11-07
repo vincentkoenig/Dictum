@@ -112,6 +112,11 @@ web_url = "https://vincentkoenig.github.io/Dictum/"
 enabled = true
 # Einträge, die älter sind, werden beim Start gelöscht (0 = nie löschen)
 keep_days = 90
+# Sprachaufnahmen der Diktate behalten, damit du im Verlauf "Neu erkennen" klicken kannst (nur auf diesem PC).
+# Aus, solange du es nicht einschaltest: Audio ist sonst nirgends gespeichert.
+keep_recordings = false
+# So viele Tage bleiben die Aufnahmen (0 = nie löschen)
+recordings_keep_days = 7
 
 [dictionary]
 # Lern-Wörterbuch: Korrigierst du ein diktiertes Wort im Textfeld, merkt sich Dictum die richtige Schreibweise.

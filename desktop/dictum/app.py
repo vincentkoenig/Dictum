@@ -160,6 +160,9 @@ class DictumApp:
         removed = self.history.purge(self.settings.history.keep_days)
         if removed:
             log.info("Verlauf: %d alte Einträge gelöscht", removed)
+        old_recordings = self.history.recordings.purge(self.settings.history.recordings_keep_days)
+        if old_recordings:
+            log.info("Aufnahmen: %d alte gelöscht", old_recordings)
 
         # Während eines Meetings jede Sekunde die Laufzeit im Tray aktualisieren
         self._ticker = QTimer()
@@ -543,11 +546,33 @@ class DictumApp:
                 cleanup_model=getattr(self.provider, "model", None) if cleaned else None,
                 raw=raw, text=text,
             )
-            self.history.add(raw, text, duration, self.engine, cleaned, snippet,
-                             app=target.app if target else "", cost=cost,
-                             group=styles.usage_group(target))
+            entry_id = self.history.add(raw, text, duration, self.engine, cleaned, snippet,
+                                        app=target.app if target else "", cost=cost,
+                                        group=styles.usage_group(target))
+            if self.settings.history.keep_recordings:
+                self.history.recordings.save(entry_id, audio)
         except Exception:
             log.exception("Verlauf konnte nicht gespeichert werden")
+
+    def retranscribe(self, entry_id: int) -> str:
+        """Ein Diktat aus dem Verlauf noch einmal erkennen (nur mit behaltener Aufnahme). Läuft wie ein
+        normales Diktat (Wörterbuch, feste Ersetzungen, Bereinigung), nur ohne Einfügen: Das Ergebnis ersetzt den
+        Verlaufeintrag und wird vom Aufrufer in die Zwischenablage gelegt. Ohne Fenster als Ziel gilt der Standardstil.
+        Wirft FileNotFoundError, wenn keine Aufnahme da ist."""
+        audio = self.history.recordings.load(entry_id)
+        dictionary = load_dictionary()
+        raw = self._transcribe(audio, dictionary)
+        if not raw:
+            return ""
+        fixes = replacements.load_replacements()
+        raw = replacements.apply_replacements(raw, fixes)
+        text = raw
+        if self.cleanup_enabled:
+            style = styles.style_for(None, self.settings.styles)
+            text = clean_text(raw, self.provider, dictionary, style, "")
+            text = replacements.apply_replacements(text, fixes)
+        self.history.update_text(entry_id, raw, text)
+        return text
 
     def _transcribe(self, audio: np.ndarray, dictionary: list[str],
                     target: context.ActiveWindow | None = None) -> str:

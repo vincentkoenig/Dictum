@@ -128,6 +128,12 @@ class FakeApp:
     def quit(self):
         self.quit_called = True
 
+    def retranscribe(self, entry_id):
+        self.retranscribed = getattr(self, "retranscribed", []) + [entry_id]
+        if getattr(self, "retranscribe_fails", False):
+            raise FileNotFoundError("weg")
+        return "Neu erkannt."
+
     def open_log(self): ...
     def open_dictionary(self): ...
     def open_snippets(self): ...
@@ -852,3 +858,56 @@ def test_eigene_schriften_werden_geladen(qapp):
     from PySide6.QtGui import QFontDatabase
     assert "Figtree" in QFontDatabase.families() and "EB Garamond" in QFontDatabase.families()
     assert (fonts.FONT_DIR / "OFL-Figtree.txt").exists() and (fonts.FONT_DIR / "OFL-EBGaramond.txt").exists()
+
+
+def test_verlauf_neu_erkennen_nur_mit_aufnahme(app, qapp):
+    import numpy as np
+
+    app.history.add("roh", "Ohne Aufnahme.")
+    entry_id = app.history.add("roh", "Mit Aufnahme.")
+    app.history.recordings.save(entry_id, np.zeros(1600, dtype=np.float32))
+    window = MainWindow(app)
+    tab = window.history_tab
+    tab.refresh(force=True)
+    assert not tab.redo_btn.isEnabled()            # noch nichts ausgewählt
+
+    tab.table.selectRow(0)                          # neuester Eintrag = mit Aufnahme
+    assert tab.redo_btn.isEnabled()
+    tab.table.selectRow(1)
+    assert not tab.redo_btn.isEnabled()             # ohne Aufnahme geht es nicht
+
+    tab.table.selectRow(0)
+    tab.retranscribe_selected()
+    pump(qapp, 0.3)
+    assert app.retranscribed == [entry_id]
+    assert QGuiApplication.clipboard().text() == "Neu erkannt."
+    assert "Neu erkannt" in tab.message.text()
+    assert tab.redo_btn.isEnabled()                 # wieder frei
+
+
+def test_verlauf_neu_erkennen_fehler_wird_gemeldet(app, qapp):
+    import numpy as np
+
+    entry_id = app.history.add("roh", "Mit Aufnahme.")
+    app.history.recordings.save(entry_id, np.zeros(1600, dtype=np.float32))
+    app.retranscribe_fails = True
+    window = MainWindow(app)
+    tab = window.history_tab
+    tab.table.selectRow(0)
+    tab.retranscribe_selected()
+    pump(qapp, 0.3)
+    assert "nichts ergeben" in tab.message.text()
+    assert tab.redo_btn.isEnabled()
+
+
+def test_einstellungen_aufnahmen_behalten(app, qapp, tmp_path):
+    path = tmp_path / "settings.toml"
+    shutil.copy(DEFAULT_PATH, path)
+    window = MainWindow(app)
+    tab = window.settings_tab
+    assert not tab.keep_recordings.isChecked()
+    tab.keep_recordings.setChecked(True)
+    tab.recordings_days.setValue(3)
+    assert tab.save(path=path) is True
+    saved = load_settings(path)
+    assert saved.history.keep_recordings is True and saved.history.recordings_keep_days == 3
