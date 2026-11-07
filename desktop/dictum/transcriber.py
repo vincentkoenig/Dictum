@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 
 import numpy as np
 from faster_whisper import WhisperModel
@@ -45,11 +46,22 @@ class LocalTranscriber:
         self.sensitive = False
         self._model: WhisperModel | None = None
         self._ready = threading.Event()
+        # Das Modell wird von drei Seiten benutzt: Laden, Erkennen und Entladen (Leerlauf). Das Schloss
+        # sorgt dafür, dass niemand ein Modell freigibt, das gerade rechnet, oder doppelt lädt.
+        self._lock = threading.Lock()
+        self._last_used = time.monotonic()
 
     def load(self) -> None:
         """Lädt das Modell. Blockiert – daher von main.py in einem Thread aufgerufen."""
+        with self._lock:
+            self._load_locked()
+
+    def _load_locked(self) -> None:
+        if self._model is not None:
+            return
         log.info("Lade Whisper-Modell '%s' …", self.model_size)
         self._model = WhisperModel(self.model_size, device="cpu", compute_type="int8")
+        self._last_used = time.monotonic()
         self._ready.set()
         log.info("Modell geladen.")
 
@@ -57,13 +69,43 @@ class LocalTranscriber:
     def is_ready(self) -> bool:
         return self._ready.is_set()
 
-    def transcribe(self, audio: np.ndarray) -> str:
+    def unload_if_idle(self, idle_minutes: float) -> bool:
+        """Gibt das Modell frei, wenn es so lange nicht gebraucht wurde (0 = nie). True, wenn entladen wurde.
+
+        Das spart Arbeitsspeicher. Beim nächsten Diktat lädt `transcribe` das Modell von selbst neu, das
+        dauert ein paar Sekunden. Rechnet es gerade oder lädt es noch, passiert nichts."""
+        if idle_minutes <= 0 or self._model is None:
+            return False
+        if time.monotonic() - self._last_used < idle_minutes * 60:
+            return False
+        if not self._lock.acquire(blocking=False):
+            return False
+        try:
+            if self._model is None:
+                return False
+            self._model = None
+            self._ready.clear()
+        finally:
+            self._lock.release()
+        log.info("Whisper-Modell nach %.0f Minuten Leerlauf entladen", idle_minutes)
+        return True
+
+    def transcribe(self, audio: np.ndarray, language: str | None = None) -> str:
+        """`language` überstimmt die eingestellte Sprache für dieses eine Diktat (z. B. nach Tastaturlayout)."""
         if len(audio) / SAMPLE_RATE < MIN_AUDIO_SECONDS:
             return ""
-        self._ready.wait()  # falls jemand diktiert, bevor das Modell fertig geladen ist
+        with self._lock:
+            # Läuft der Ladevorgang noch (oder wurde das Modell im Leerlauf entladen), wartet man hier
+            # bzw. lädt es jetzt – statt mit einem leeren Modell abzustürzen
+            self._load_locked()
+            text = self._transcribe_locked(audio, language)
+            self._last_used = time.monotonic()
+        return text
+
+    def _transcribe_locked(self, audio: np.ndarray, language_override: str | None) -> str:
         assert self._model is not None
 
-        language = self._pick_language(audio)
+        language = language_override or self._pick_language(audio)
         segments, info = self._model.transcribe(
             audio,
             language=language,

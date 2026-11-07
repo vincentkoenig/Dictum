@@ -68,6 +68,9 @@ egal ob Word, Browser, Outlook oder Slack. Dieses Dokument erklärt, wie das fun
 | `gui/styles_tab.py` | Reiter Stile | Stil je Kategorie, eigene Zuordnung, Kontext-Haken |
 | `commands.py` | Command Mode | Anweisung + markierter Text → KI → Ergebnis |
 | `levels.py` | Flüstermodus | leise Aufnahmen auf Sprechpegel anheben |
+| `layout.py` | Sprache nach Tastaturlayout | `GetKeyboardLayout` des Zielfensters → Sprachcode |
+| `media.py` | Ton anderer Programme | Lautstärkemixer (pycaw) senken, danach exakt zurück |
+| `replacements.py` | Feste Ersetzungen | „klingt wie“ → Schreibweise, ohne KI, ganze Wörter |
 | `learn.py` | Lern-Wörterbuch | Korrekturen im Textfeld erkennen (difflib) |
 | `history.py` | Lokaler Verlauf | SQLite-Datei, nur auf diesem PC |
 | `settings_io.py` | Einstellungen speichern | tomlkit erhält die Kommentare |
@@ -246,6 +249,33 @@ einen Fehlertyp kennen.
 - Beide Dateien sind **persönlich** und stehen in `.gitignore`. Im Repo liegen nur
   `*.example.*`-Vorlagen, die beim ersten Start kopiert werden. Änderungen wirken beim
   nächsten Diktat, ohne Neustart.
+
+### Feste Ersetzungen (`replacements.toml`)
+
+Das Wörterbuch ist nur ein Hinweis, eine Ersetzung gilt immer: `from = ["super base"]`, `to = "Supabase"`. Sie
+läuft direkt nach der Erkennung (damit Snippets und KI den richtigen Text sehen) und nochmal nach der
+Bereinigung, falls die KI eine Schreibweise zurückgeändert hat. Es zählen nur ganze Wörter, ohne Rücksicht auf
+Groß- und Kleinschreibung. Fehlt die Datei oder ist sie kaputt, läuft das Diktat ohne Ersetzungen weiter.
+
+### Kleine Verbesserungen aus der Hex-Analyse (alle in `settings.toml`, Standard: aus)
+
+Ideen aus dem Open-Source-Diktierprogramm [Hex](https://github.com/anomalyco/hex), in Python nachgebaut:
+
+- **`transcription.follow_keyboard`**: Das Tastaturlayout des Zielfensters bestimmt die Sprache. Billiger als
+  `auto` (kein Extra-Durchlauf von 1,5–2 s).
+- **`recording.while_dictating`**: `"duck"` stellt andere Programme auf `duck_percent` Prozent, `"mute"`
+  schaltet sie stumm, solange aufgenommen wird. Alles läuft in einem Hilfs-Thread (`media.py`), damit der
+  Tastatur-Thread nie wartet. Gemerkt wird der Zustand jeder Audio-Sitzung, zurückgestellt wird genau er.
+  Beim Beenden von Dictum wird ebenfalls zurückgestellt. Stürzt Dictum mitten in der Aufnahme ab, bleibt die
+  Lautstärke der Programme niedrig, bis man sie im Lautstärkemixer wieder aufdreht.
+- **`insert.smart_spacing`**: Steht der Cursor direkt hinter einem Wort, kommt ein Leerzeichen vor das Diktat
+  (das Zeichen vor dem Cursor wird per UI Automation gelesen, `context.char_before_caret`). Groß- und
+  Kleinschreibung bleiben unangetastet, denn im Deutschen sind Nomen groß.
+- **`transcription.unload_after_minutes`**: Das lokale Modell verlässt nach so viel Leerlauf den Arbeitsspeicher
+  und wird beim nächsten Diktat von selbst neu geladen. Ein Schloss in `LocalTranscriber` verhindert, dass es
+  freigegeben wird, während es rechnet.
+- **Fernwartung**: Bei `mstsc`/`msrdc` wartet das Einfügen 0,4 s davor und 3 s, bevor die alte Zwischenablage
+  zurückkommt. Der andere Rechner holt den Text erst beim Einfügen ab.
 
 ### Lokal oder Cloud?
 

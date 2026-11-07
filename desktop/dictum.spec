@@ -11,6 +11,7 @@ datas = [
     ("settings.toml", "."),
     ("dictionary.example.txt", "."),
     ("snippets.example.toml", "."),
+    ("replacements.example.toml", "."),
     ("assets/dictum.ico", "assets"),
     ("assets/fonts", "assets/fonts"),   # Figtree und EB Garamond samt Lizenzen
 ]
@@ -25,7 +26,7 @@ a = Analysis(
     binaries=binaries,
     datas=datas,
     # Die KI-Anbieter werden erst zur Laufzeit nach Namen geladen (create_provider)
-    hiddenimports=["dictum.llm.anthropic_provider", "dictum.llm.openai_provider"],
+    hiddenimports=["dictum.llm.anthropic_provider", "dictum.llm.openai_provider", "pycaw.pycaw", "comtypes"],
     excludes=["tkinter", "matplotlib", "pytest", "IPython", "PIL.ImageTk"],
     noarchive=False,
 )

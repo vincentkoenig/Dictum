@@ -54,12 +54,14 @@ class OpenAITranscriber:
     def is_ready(self) -> bool:
         return True
 
-    def transcribe(self, audio: np.ndarray) -> str:
+    def transcribe(self, audio: np.ndarray, language: str | None = None) -> str:
+        """`language` überstimmt die eingestellte Sprache für dieses eine Diktat (z. B. nach Tastaturlayout)."""
         if len(audio) / SAMPLE_RATE < MIN_AUDIO_SECONDS:
             return ""
         kwargs = {}
-        if self.language != "auto":
-            kwargs["language"] = self.language
+        language = language or self.language
+        if language != "auto":
+            kwargs["language"] = language
         if self.vocabulary:
             # Wie initial_prompt beim lokalen Whisper: Hinweis auf Schreibweisen
             kwargs["prompt"] = ", ".join(self.vocabulary) + "."

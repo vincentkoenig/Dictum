@@ -126,3 +126,49 @@ def field_text(max_chars: int = 600) -> str:
     worker.start()
     worker.join(FIELD_TEXT_TIMEOUT)
     return result[0] if result else ""
+
+
+CARET_TEXT_TIMEOUT = 0.5  # Sekunden: kürzer als beim Feldtext, denn hier wartet das Einfügen darauf
+
+
+def char_before_caret() -> str:
+    """Das Zeichen direkt vor dem Cursor im Eingabefeld, oder "" (Feldanfang, nicht lesbar, Text markiert).
+
+    Dafür dient wieder UI Automation, hier mit der Auswahl: Ein Cursor ohne Markierung ist eine leere Auswahl.
+    Ihren Anfang rücken wir ein Zeichen zurück und lesen es. Ist Text markiert, ersetzt das Diktat ihn, dann
+    zählt das Zeichen davor nicht ("" wird zurückgegeben). Passwortfelder werden nie gelesen. Viele Programme
+    (z. B. Browser) liefern das nur mit eingeschalteter Barrierefreiheit. Ohne Antwort bleibt es bei "".
+    """
+    import threading
+
+    result: list[str] = []
+
+    def read() -> None:
+        try:
+            import uiautomation as auto
+
+            with auto.UIAutomationInitializerInThread():
+                control = auto.GetFocusedControl()
+                if control is None or getattr(control, "IsPassword", False):
+                    return
+                pattern = control.GetTextPattern()
+                if not pattern:
+                    return
+                selection = pattern.GetSelection()
+                if not selection:
+                    return
+                caret = selection[0]
+                if caret.GetText(1):
+                    return  # Text markiert: er wird ersetzt
+                before = caret.Clone()
+                moved = before.MoveEndpointByUnit(
+                    auto.TextPatternRangeEndpoint.Start, auto.TextUnit.Character, -1, waitTime=0)
+                if moved:
+                    result.append(before.GetText(1))
+        except Exception:
+            log.debug("Zeichen vor dem Cursor nicht lesbar", exc_info=True)
+
+    worker = threading.Thread(target=read, daemon=True)
+    worker.start()
+    worker.join(CARET_TEXT_TIMEOUT)
+    return result[0] if result else ""

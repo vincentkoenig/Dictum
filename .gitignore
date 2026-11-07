@@ -8,6 +8,7 @@ supabase/functions/.env
 # --- Persönliche Daten der Desktop-App (Vorlagen: *.example.*) ---
 desktop/dictionary.txt
 desktop/snippets.toml
+desktop/replacements.toml
 desktop/logs/
 desktop/data/
 desktop/build/

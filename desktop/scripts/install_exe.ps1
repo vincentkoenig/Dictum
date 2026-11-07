@@ -33,7 +33,7 @@ if ($LASTEXITCODE -ge 8) { throw "Kopieren fehlgeschlagen (robocopy $LASTEXITCOD
 $data = Join-Path $env:APPDATA "Dictum"
 New-Item -ItemType Directory -Force $data | Out-Null
 if ($MigrateData) {
-    foreach ($name in "settings.toml", "dictionary.txt", "snippets.toml", "data\history.db") {
+    foreach ($name in "settings.toml", "dictionary.txt", "snippets.toml", "replacements.toml", "data\history.db") {
         $from = Join-Path $desktop $name
         $to = Join-Path $data $name
         if (-not (Test-Path $from)) { continue }

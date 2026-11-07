@@ -38,7 +38,7 @@ from PySide6.QtCore import QObject, QTimer, Signal
 from PySide6.QtWidgets import QApplication
 
 from .gui import theme
-from . import autostart, commands, context, costs, learn, levels, shortcuts, sounds, styles
+from . import autostart, commands, context, costs, layout, learn, levels, media, replacements, shortcuts, sounds, styles
 from .audio import Recorder, duration_seconds
 from .cleanup import clean_text
 from .cloud_transcriber import OpenAITranscriber
@@ -103,6 +103,8 @@ class DictumApp:
         self.cleanup_enabled = settings.cleanup.enabled
         self.provider = create_provider(settings.cleanup.provider, settings.cleanup)
         self.history = History()
+        # Ton anderer Programme beim Aufnehmen leiser stellen (Standard: aus, siehe [recording])
+        self.ducker = media.AudioDucker(settings.recording.while_dictating, settings.recording.duck_percent)
         self.hotkey_text = hotkey_label(settings.hotkey.keys)
 
         self.overlay = Overlay(flow_bar=settings.ui.flow_bar, hotkey=self.hotkey_text)
@@ -147,6 +149,7 @@ class DictumApp:
         self._stt_model: str | None = None                # Cloud-Modell des letzten Diktats (None = lokal)
         self._ticker: QTimer | None = None
         ensure_user_files()
+        replacements.ensure_file()
 
     def run(self) -> int:
         threading.Thread(target=self._load_model, daemon=True).start()
@@ -179,6 +182,7 @@ class DictumApp:
         log.info("Beende Dictum …")
         # Laufendes Meeting sauber abschließen – der Upload passiert beim nächsten Start
         self.meetings.stop()
+        self.ducker.shutdown()  # Lautstärke der anderen Programme zurückstellen, falls gerade aufgenommen wird
         self.listener.stop()
         self._jobs.put(None)  # Signal an den Worker: aufhören
         self.tray.stop()
@@ -260,11 +264,12 @@ class DictumApp:
         self.cloud.model = new.transcription.openai_model
         self.cleanup_enabled = new.cleanup.enabled
         self.provider = create_provider(new.cleanup.provider, new.cleanup)
+        self.ducker.mode, self.ducker.percent = new.recording.while_dictating, new.recording.duck_percent
         # … und das gemeinsame Einstellungs-Objekt aktualisieren, aus dem u. a. der
         # MeetingController bei jedem Meeting liest. Es ist dasselbe Objekt wie bisher,
         # deshalb sehen alle Beteiligten die neuen Werte sofort.
         for section in ("hotkey", "transcription", "cleanup", "meeting", "history", "dictionary", "styles",
-                        "context", "feedback", "ui"):
+                        "context", "feedback", "recording", "insert", "ui"):
             setattr(old, section, getattr(new, section))
         log.info("Einstellungen übernommen (Neustart nötig für: %s)", ", ".join(needs_restart) or "nichts")
         return needs_restart
@@ -339,6 +344,9 @@ class DictumApp:
     def _tick(self) -> None:
         if self.meetings.is_recording:
             self._refresh_tray()
+        # Modell nach Leerlauf freigeben (Standard: nie). Mit einer Aufnahme in Arbeit passiert nichts.
+        if not self.recorder.is_recording:
+            self.local.unload_if_idle(self.settings.transcription.unload_after_minutes)
 
     # --- Hotkey-Ereignisse (laufen im pynput-Thread, müssen schnell sein) ------------
 
@@ -353,6 +361,7 @@ class DictumApp:
         # Im Log, damit man später sieht, ob Dictum bei einem Tastendruck wirklich aufgenommen hat
         log.info("Aufnahme gestartet (Ton %s)", "an" if self.settings.feedback.sounds else "aus")
         self._beep(880)
+        self.ducker.duck()
         self.overlay.show("listening")
         self._arm_limit()
 
@@ -379,6 +388,7 @@ class DictumApp:
     def _stop(self) -> None:
         self._disarm_limit()
         audio = self.recorder.stop()
+        self.ducker.restore()
         log.info("Aufnahme beendet")
         self._beep(660)
         ready = self.engine == "openai" or self.local.is_ready
@@ -402,6 +412,7 @@ class DictumApp:
         self._disarm_limit()
         self._command_mode = False
         self.recorder.stop()
+        self.ducker.restore()
         self.overlay.hide()
         log.debug("Aufnahme verworfen (andere Taste oder Esc)")
 
@@ -436,11 +447,14 @@ class DictumApp:
         snippets = load_snippets()
 
         t0 = time.perf_counter()
-        raw = self._transcribe(audio, dictionary)
+        raw = self._transcribe(audio, dictionary, target)
         t1 = time.perf_counter()
         if not raw:
             self.overlay.flash("Nichts erkannt")
             return
+        # Feste Ersetzungen ("super base" → "Supabase"): gelten immer, auch ohne KI. Frisch gelesen wie das Wörterbuch.
+        fixes = replacements.load_replacements()
+        raw = replacements.apply_replacements(raw, fixes)
 
         snippet = match_snippet(raw, snippets)
         cleaned = False
@@ -451,6 +465,7 @@ class DictumApp:
             self.overlay.show("polishing")
             style = styles.style_for(target, self.settings.styles)
             text = clean_text(raw, self.provider, dictionary, style, self._context_for(target))
+            text = replacements.apply_replacements(text, fixes)  # falls die KI eine Schreibweise zurückgeändert hat
             cleaned = True
         else:
             text = raw
@@ -459,14 +474,14 @@ class DictumApp:
         log.info("Fertig: Erkennung %.1f s · Bereinigung %.1f s → %r", t1 - t0, t2 - t1, text)
         self.overlay.hide()
         self._last_text = text
-        insert_text(text, target)
+        insert_text(text, target, smart_spacing=self.settings.insert.smart_spacing)
         self._remember(raw, text, audio, cleaned, snippet is not None, target)
         self._learn_async(text, target)
 
     def _process_command(self, audio: np.ndarray, target: context.ActiveWindow | None) -> None:
         """Command Mode: Anweisung erkennen, markierten Text holen, KI anwenden, Ergebnis einfügen."""
         dictionary = load_dictionary()
-        instruction = self._transcribe(audio, dictionary)
+        instruction = self._transcribe(audio, dictionary, target)
         if not instruction:
             self.overlay.flash("Keine Anweisung erkannt")
             return
@@ -534,7 +549,14 @@ class DictumApp:
         except Exception:
             log.exception("Verlauf konnte nicht gespeichert werden")
 
-    def _transcribe(self, audio: np.ndarray, dictionary: list[str]) -> str:
+    def _transcribe(self, audio: np.ndarray, dictionary: list[str],
+                    target: context.ActiveWindow | None = None) -> str:
+        # Sprache vom Tastaturlayout des Zielfensters (nur wenn eingeschaltet, sonst gilt die eingestellte)
+        language = None
+        if self.settings.transcription.follow_keyboard and target is not None:
+            language = layout.language_for_window(target.hwnd)
+            if language:
+                log.info("Sprache nach Tastaturlayout: %s", language)
         self.local.vocabulary = self.cloud.vocabulary = dictionary
         audio, gain = levels.boost_quiet(audio, self.whisper_mode)
         if gain > 1.5:
@@ -542,14 +564,14 @@ class DictumApp:
         self._stt_model = None
         if self.engine == "openai":
             try:
-                text = self.cloud.transcribe(audio)
+                text = self.cloud.transcribe(audio, language=language)
                 self._stt_model = self.cloud.model
                 return text
             except LLMError as e:
                 # Cloud nicht verfügbar → lokal weitermachen statt das Diktat zu verlieren
                 log.warning("%s – nutze lokales Whisper", e)
                 self.overlay.show("transcribing")
-        return self.local.transcribe(audio)
+        return self.local.transcribe(audio, language=language)
 
     def _beep(self, frequency: int) -> None:
         if self.settings.feedback.sounds:

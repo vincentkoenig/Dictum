@@ -102,7 +102,7 @@ def make_app(monkeypatch, provider, selection="Alter Text.", instruction="mach d
     monkeypatch.setattr(app_module, "load_dictionary", lambda: [])
     app = app_module.DictumApp.__new__(app_module.DictumApp)
     app.overlay, app.provider, app._last_text = Overlay(), provider, ""
-    app._transcribe = lambda audio, dictionary: instruction
+    app._transcribe = lambda audio, dictionary, target=None: instruction
     remembered = []
     app._remember = lambda *args: remembered.append(args)
     return app, inserted, remembered, np.zeros(16_000, dtype=np.float32)

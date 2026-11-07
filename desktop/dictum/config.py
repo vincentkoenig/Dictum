@@ -54,6 +54,7 @@ def ensure_user_dir() -> None:
 VALID_MODES = {"both", "hold", "toggle"}
 VALID_ENGINES = {"local", "openai"}
 VALID_PROVIDERS = {"anthropic", "openai"}
+VALID_WHILE_DICTATING = {"off", "duck", "mute"}
 
 
 @dataclass
@@ -76,6 +77,8 @@ class TranscriptionSettings:
     language: str = "de"
     fallback_language: str = "de"
     whisper_mode: bool = True   # leise Sprache verstärken, Sprachfilter empfindlicher (siehe levels.py)
+    follow_keyboard: bool = False   # Sprache vom Tastaturlayout des Zielfensters nehmen (siehe layout.py)
+    unload_after_minutes: float = 0  # lokales Modell nach so vielen Minuten ohne Diktat entladen (0 = nie)
 
 
 @dataclass
@@ -140,6 +143,19 @@ class FeedbackSettings:
 
 
 @dataclass
+class RecordingSettings:
+    """Was während einer Aufnahme mit dem Ton anderer Programme passiert (siehe media.py)."""
+
+    while_dictating: str = "off"   # "off", "duck" (leiser) oder "mute" (stumm)
+    duck_percent: int = 20         # Lautstärke der anderen Programme bei "duck", in Prozent
+
+
+@dataclass
+class InsertSettings:
+    smart_spacing: bool = False    # Leerzeichen vor das Diktat setzen, wenn der Cursor direkt hinter einem Wort steht
+
+
+@dataclass
 class UiSettings:
     flow_bar: bool = True       # dauerhaft sichtbare Blase unten in der Bildschirmmitte
     theme: str = "system"       # "system" (wie Windows), "light" oder "dark"
@@ -157,6 +173,8 @@ class Settings:
     styles: StylesSettings = field(default_factory=StylesSettings)
     context: ContextSettings = field(default_factory=ContextSettings)
     feedback: FeedbackSettings = field(default_factory=FeedbackSettings)
+    recording: RecordingSettings = field(default_factory=RecordingSettings)
+    insert: InsertSettings = field(default_factory=InsertSettings)
     ui: UiSettings = field(default_factory=UiSettings)
 
 
@@ -178,6 +196,8 @@ def load_settings(path: Path = DEFAULT_PATH) -> Settings:
         styles=StylesSettings(**data.get("styles", {})),
         context=ContextSettings(**data.get("context", {})),
         feedback=FeedbackSettings(**data.get("feedback", {})),
+        recording=RecordingSettings(**data.get("recording", {})),
+        insert=InsertSettings(**data.get("insert", {})),
         ui=UiSettings(**data.get("ui", {})),
     )
     _validate(settings)
@@ -224,6 +244,14 @@ def _validate(settings: Settings) -> None:
         raise ValueError("hold_threshold muss größer als 0 sein.")
     if settings.transcription.engine not in VALID_ENGINES:
         raise ValueError(f"Ungültige engine '{settings.transcription.engine}'. Erlaubt: {VALID_ENGINES}")
+    if settings.recording.while_dictating not in VALID_WHILE_DICTATING:
+        raise ValueError(
+            f"Ungültiger Wert '{settings.recording.while_dictating}' bei recording.while_dictating. "
+            f"Erlaubt: {VALID_WHILE_DICTATING}")
+    if not 0 <= settings.recording.duck_percent <= 100:
+        raise ValueError("recording.duck_percent muss zwischen 0 und 100 liegen.")
+    if settings.transcription.unload_after_minutes < 0:
+        raise ValueError("transcription.unload_after_minutes darf nicht negativ sein (0 = nie).")
     if settings.cleanup.provider not in VALID_PROVIDERS:
         raise ValueError(f"Ungültiger provider '{settings.cleanup.provider}'. Erlaubt: {VALID_PROVIDERS}")
 

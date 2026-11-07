@@ -1,0 +1,15 @@
+# Feste Ersetzungen: Steht eine der "from"-Schreibweisen im erkannten Text, wird sie durch "to" ersetzt.
+# Anders als das Wörterbuch ist das keine Empfehlung an die KI, sondern gilt immer, auch ohne Internet.
+# Es zählen nur ganze Wörter. Groß- und Kleinschreibung der Vorlage ist egal.
+#
+# Diese Datei wird beim ersten Start nach "replacements.toml" kopiert.
+# Änderungen wirken beim nächsten Diktat, ein Neustart ist nicht nötig.
+
+[[replace]]
+from = ["super base", "supa base"]
+to = "Supabase"
+
+# Weitere Einträge nach demselben Muster, z. B.:
+# [[replace]]
+# from = ["Mueller GmbH"]
+# to = "Müller GmbH"

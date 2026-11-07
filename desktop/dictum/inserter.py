@@ -28,6 +28,14 @@ log = logging.getLogger(__name__)
 _BEFORE_PASTE = 0.05
 _AFTER_PASTE = 0.3
 
+# Fernwartung (Remote-Desktop-Client): Die Zwischenablage wandert asynchron zum anderen Rechner, und der holt den
+# Text erst, wenn er selbst einfügt. Strg+V sofort zu schicken oder die alte Zwischenablage nach 0,3 s
+# zurückzulegen, ginge schief. Daher längere Pausen (Idee von Hex, einer Open-Source-Diktier-App).
+_REMOTE_DESKTOP_EXES = {"mstsc", "msrdc", "msrdcw"}
+_REMOTE_DESKTOP_CLASSES = {"tscshellcontainerclass"}
+_REMOTE_BEFORE_PASTE = 0.4
+_AFTER_PASTE_REMOTE = 3.0
+
 _controller = keyboard.Controller()
 
 
@@ -80,26 +88,65 @@ def _restore_focus(target: context.ActiveWindow | None) -> None:
         log.debug("Fokus konnte nicht zurückgeholt werden", exc_info=True)
 
 
-def insert_text(text: str, target: context.ActiveWindow | None = None) -> None:
+def is_remote_desktop(window: context.ActiveWindow | None) -> bool:
+    if window is None:
+        return False
+    return window.exe in _REMOTE_DESKTOP_EXES or window.window_class.lower() in _REMOTE_DESKTOP_CLASSES
+
+
+def paste_delays(window: context.ActiveWindow | None) -> tuple[float, float]:
+    """Pause vor dem Einfügen und Pause, bevor die alte Zwischenablage zurückkommt."""
+    if is_remote_desktop(window):
+        return _REMOTE_BEFORE_PASTE, _AFTER_PASTE_REMOTE
+    return _BEFORE_PASTE, _AFTER_PASTE
+
+
+# Vor diesen Zeichen steht kein Leerzeichen (Satzzeichen, schließende Klammern)
+_NO_SPACE_BEFORE = set(".,;:!?)]}…%»”’")
+# Hinter diesen Zeichen beginnt etwas Neues, ein Leerzeichen wäre falsch (öffnende Klammern, Anführungszeichen, Pfade)
+_NO_SPACE_AFTER = set("([{„«“‘'\"/@#-_") | {chr(92)}
+
+
+def needs_space_before(previous: str, text: str) -> bool:
+    """Soll vor `text` ein Leerzeichen stehen, wenn der Cursor direkt hinter `previous` steht?
+
+    Nur dann, wenn das Zeichen davor zu einem Wort oder Satz gehört (Buchstabe, Ziffer, Satzzeichen) und das
+    Diktat selbst nicht mit einem Satzzeichen beginnt. Am Zeilen- oder Feldanfang ("" oder Leerraum) oder hinter
+    einer öffnenden Klammer bleibt alles wie diktiert."""
+    if not previous or not text:
+        return False
+    if previous.isspace() or previous in _NO_SPACE_AFTER:
+        return False
+    first = text[0]
+    return not (first.isspace() or first in _NO_SPACE_BEFORE)
+
+
+def insert_text(text: str, target: context.ActiveWindow | None = None, smart_spacing: bool = False) -> None:
+    """Fügt `text` ins aktive Feld ein. Mit `smart_spacing` kommt ein Leerzeichen davor, wenn der Cursor direkt
+    hinter einem Wort steht (sonst klebt das Diktat am vorigen Wort)."""
     if not text:
         return
     _restore_focus(target)
+    window = target if target is not None else context.active_window()
+    if smart_spacing and needs_space_before(context.char_before_caret(), text):
+        text = " " + text
+    before_paste, after_paste = paste_delays(window)
     previous = clipboard.snapshot()
     try:
         clipboard.set_text(text)
     except clipboard.ClipboardBusy:
         log.warning("Zwischenablage belegt – Text nicht eingefügt")
         return
-    time.sleep(_BEFORE_PASTE)
+    time.sleep(before_paste)
     # Klassische Terminals fügen erst mit Strg+Shift+V ein
-    shift = context.is_terminal(target if target is not None else context.active_window())
+    shift = context.is_terminal(window)
     with _controller.pressed(keyboard.Key.ctrl):
         if shift:
             with _controller.pressed(keyboard.Key.shift):
                 _controller.tap("v")
         else:
             _controller.tap("v")
-    time.sleep(_AFTER_PASTE)
+    time.sleep(after_paste)
 
     clipboard.restore(previous)
     log.debug("Eingefügt: %d Zeichen", len(text))

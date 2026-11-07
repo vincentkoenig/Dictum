@@ -64,6 +64,15 @@ whisper_mode = true
 # Fällt die automatische Erkennung unsicher aus, wird diese Sprache genommen
 fallback_language = "de"
 
+# Sprache nach Tastaturlayout: Dictum liest, welches Layout (Win+Leertaste) im Zielfenster gerade aktiv ist, und
+# erkennt in dieser Sprache (Deutsch, Englisch, Französisch …). Das kostet keine Zeit wie "auto". Unbekannte
+# Layouts nehmen die oben eingestellte Sprache. Nur sinnvoll, wenn du deine Layouts wirklich passend umschaltest.
+follow_keyboard = false
+
+# Lokales Modell aus dem Arbeitsspeicher entfernen, wenn so viele Minuten lang nicht diktiert wurde (0 = nie).
+# Das nächste Diktat lädt es neu und braucht dann ein paar Sekunden länger.
+unload_after_minutes = 0
+
 [cleanup]
 # KI-Bereinigung: Füllwörter raus, Selbstkorrekturen anwenden, Satzzeichen, Listen.
 # Im Tray-Menü an/aus. Ohne Internet oder Key wird automatisch der Rohtext eingefügt.
@@ -128,6 +137,19 @@ other = "neutral"
 # Beides geht nur an den KI-Anbieter, nur wenn die Bereinigung an ist, und wird nirgends gespeichert.
 window_title = true   # Titel des Fensters, z. B. "Re: Angebot Müller GmbH – Outlook"
 field_text = false    # Text im Eingabefeld rund um die Schreibstelle (Passwortfelder nie)
+
+[recording]
+# Was mit dem Ton anderer Programme (Musik, Video) passiert, solange du diktierst. Er stört sonst die Erkennung.
+#   "off"  = nichts       "duck" = leiser stellen (duck_percent)       "mute" = stummschalten
+# Danach kommt die alte Lautstärke zurück. Dictums eigene Töne bleiben, wie sie sind.
+while_dictating = "off"
+duck_percent = 20   # Lautstärke der anderen Programme bei "duck", in Prozent ihres bisherigen Werts
+
+[insert]
+# Steht der Cursor direkt hinter einem Wort, setzt Dictum ein Leerzeichen vor das Diktat. Dafür liest es das
+# Zeichen vor dem Cursor (nur lokal, nie Passwortfelder). Manche Programme liefern es nicht, dann bleibt alles
+# wie diktiert.
+smart_spacing = false
 
 [feedback]
 # Sanfter Ton bei Start und Stopp der Aufnahme (Standard: aus) und seine Lautstärke in Prozent

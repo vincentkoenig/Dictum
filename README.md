@@ -20,6 +20,8 @@ Tippen ist langsam, und fertige Diktier-Dienste schicken jedes Wort an einen fre
 - **Esc** bricht eine laufende Aufnahme ab, ein **Zeitlimit** (Standard 20 Minuten) beendet vergessene Aufnahmen
 - **Letztes Diktat erneut einfügen oder kopieren** per Tastenkürzel, falls ein Feld den Text verschluckt hat
 - **Flüstermodus**: leise Sprache wird automatisch verstärkt und vom Sprachfilter nicht mehr als Stille weggeworfen
+- **Ton anderer Programme leiser**: Auf Wunsch senkt Dictum Musik und Video während der Aufnahme (oder schaltet sie stumm) und stellt sie danach exakt zurück
+- **Sprache nach Tastaturlayout** (auf Wunsch): Deutsch oder Englisch folgt dem Layout, das im Zielfenster aktiv ist
 - Text landet per Zwischenablage und simuliertem Strg+V im aktiven Feld. Die **vorherige Zwischenablage kommt komplett zurück** (Bilder, formatierter Text, kopierte Dateien), und das Diktat taucht nicht im Win+V-Verlauf auf
 
 ### ✨ Smarter Text
@@ -28,6 +30,8 @@ Tippen ist langsam, und fertige Diktier-Dienste schicken jedes Wort an einen fre
 - **Kontext für Namen**: Der Fenstertitel („Re: Angebot Müller GmbH“) und auf Wunsch der Text im Eingabefeld helfen der KI, Namen richtig zu schreiben
 - **Command Mode**: Text markieren, eine Taste halten, eine Anweisung sprechen („mach das kürzer“, „übersetze ins Englische“). Das Ergebnis ersetzt die Markierung, Strg+Z macht es rückgängig. Ohne Markierung schreibt die KI einen neuen Text
 - **Wörterbuch, Textbausteine und Lern-Wörterbuch**: Namen und Fachbegriffe verbessern Erkennung und Bereinigung, Textbausteine werden per Zuruf eingefügt, und auf Wunsch lernt Dictum aus deinen Korrekturen im Textfeld
+- **Feste Ersetzungen** (`replacements.toml`): „super base“ wird immer zu „Supabase“, auch ohne KI und ohne Internet
+- **Intelligenter Abstand** (auf Wunsch): Steht der Cursor direkt hinter einem Wort, setzt Dictum das Leerzeichen davor
 
 ### 🫧 Flow Bar
 - Kleine Blase unten in der Bildschirmmitte, immer sichtbar: ein schmaler Strich, der beim Überfahren zu zwei Kapseln wird (Mikrofon, Aufnahme-Knopf mit Pfeil), mit Hinweis über dem Knopf unter der Maus
@@ -77,6 +81,7 @@ Tippen ist langsam, und fertige Diktier-Dienste schicken jedes Wort an einen fre
 - **Claude API** – Standard für die Bereinigung und den Command Mode (Haiku 5.5)
 - **pynput** – globale Hotkeys inklusive Maustasten, Tastendruck simulieren
 - **pywin32, psutil, uiautomation** – Zwischenablage mit allen Formaten, aktives Programm, Text im Feld lesen
+- **pycaw** – Lautstärke einzelner Programme im Windows-Mixer (Ton beim Diktieren senken)
 - **sounddevice, soundcard, soundfile** – Mikrofon, PC-Ton (WASAPI-Loopback), Opus-Aufnahmen
 - **Figtree, EB Garamond** – mitgelieferte freie Schriften (SIL Open Font License, Lizenztexte in `desktop/assets/fonts`)
 - **tomlkit** – Einstellungen schreiben, ohne die Kommentare der Datei zu verlieren
@@ -137,6 +142,8 @@ Dictum/
 │   │   ├── context.py               # aktives Programm, Fenstertitel, Text im Feld
 │   │   ├── inserter.py, clipboard.py  # Einfügen, Zwischenablage mit allen Formaten
 │   │   ├── vocabulary.py, sync.py   # Wörterbuch und Textbausteine, Abgleich mit der Cloud
+│   │   ├── replacements.py          # feste Ersetzungen („klingt wie“ → Schreibweise)
+│   │   ├── media.py, layout.py      # Ton anderer Programme senken, Sprache nach Tastaturlayout
 │   │   ├── history.py, costs.py     # Verlauf (SQLite), Statistik, Kostenschätzung
 │   │   ├── meeting.py, meeting_controller.py, upload_queue.py, cloud.py  # Meetings und Upload
 │   │   ├── config.py, settings_io.py  # settings.toml lesen und mit Kommentaren schreiben
