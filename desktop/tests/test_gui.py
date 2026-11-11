@@ -362,6 +362,20 @@ def test_einstellungen_laden_und_speichern(app, qapp, tmp_path):
     assert app.restarted is False
 
 
+def test_uebersetzen_und_assistent_werden_gespeichert(app, qapp, tmp_path):
+    path = tmp_path / "settings.toml"
+    shutil.copy(DEFAULT_PATH, path)
+    window = MainWindow(app)
+    tab = window.settings_tab
+    tab.translate_key.set_keys(["f8"])
+    tab.assistant_key.set_keys(["mouse_x1"])
+    tab.translate_target.setCurrentIndex(tab.translate_target.findData("fr"))
+    assert tab.save(path=path) is True
+    saved = load_settings(path)
+    assert saved.hotkey.translate == ["f8"] and saved.hotkey.assistant == ["mouse_x1"]
+    assert saved.translation.target == "fr"
+
+
 def test_speichern_und_neu_starten_ruft_restart(app, qapp, tmp_path):
     path = tmp_path / "settings.toml"
     shutil.copy(DEFAULT_PATH, path)

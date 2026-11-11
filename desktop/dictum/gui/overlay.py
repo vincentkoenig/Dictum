@@ -96,6 +96,10 @@ STATES = {
     "polishing": ("✦", "#b48cff", "Formuliert …"),
     "command": ("●", "#b48cff", "Befehl – sprich …"),
     "command_working": ("✦", "#b48cff", "Setze um …"),
+    "translate": ("●", "#3cc9a8", "Übersetzen – sprich …"),
+    "translate_working": ("✦", "#3cc9a8", "Übersetzt …"),
+    "assistant": ("●", "#e56bd6", "Assistent – frag …"),
+    "assistant_working": ("✦", "#e56bd6", "Denkt nach …"),
 }
 FLASH_ICON = ("ⓘ", "#f5a623")
 
@@ -111,7 +115,7 @@ DICTATE_W, GAP, MEETING_W, MORE_W = 84, 8, 36, 32
 HOVER_SIZE = (2 * PAD + DICTATE_W + GAP + MEETING_W + MORE_W, 2 * PAD + BTN_H)
 
 # Zustände, in denen ein Klick die Aufnahme beendet
-RECORDING_STATES = {"listening", "command"}
+RECORDING_STATES = {"listening", "command", "translate", "assistant"}
 
 
 def hover_rects() -> dict[str, QRectF]:

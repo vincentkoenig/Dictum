@@ -66,7 +66,10 @@ egal ob Word, Browser, Outlook oder Slack. Dieses Dokument erklärt, wie das fun
 | `gui/dictionary_tab.py` | Reiter Wörterbuch | Wörter und Snippets bearbeiten, sofort gespeichert |
 | `styles.py` | Stile pro Programm | Programm → Kategorie → Stil, Anweisung an die KI |
 | `gui/styles_tab.py` | Reiter Stile | Stil je Kategorie, eigene Zuordnung, Kontext-Haken |
-| `commands.py` | Command Mode | Anweisung + markierter Text → KI → Ergebnis |
+| `commands.py` | Command Mode, Assistent | Anweisung + markierter Text → KI → Ergebnis; ohne Markierung beantwortet der Assistent eine Frage |
+| `translate.py` | Diktat mit Übersetzung | Sprache A sprechen, Sprache B einfügen (bereinigt und übersetzt in einem KI-Schritt) |
+| `hooks.py` | Transkriptions-Hook | eigenes Skript bekommt den Text vor dem Einfügen (stdin → stdout) |
+| `control.py` | Fernsteuerung | `dictum --toggle` & Co. schicken dem laufenden Dictum Befehle (benannte Pipe + Schlüsseldatei) |
 | `levels.py` | Flüstermodus | leise Aufnahmen auf Sprechpegel anheben |
 | `layout.py` | Sprache nach Tastaturlayout | `GetKeyboardLayout` des Zielfensters → Sprachcode |
 | `media.py` | Ton anderer Programme | Lautstärkemixer (pycaw) senken, danach exakt zurück |
@@ -327,11 +330,21 @@ Mit `[meeting] auto_detect = true` (oder im Fenster: Einstellungen → Meetings)
 beginnt, und **fragt per Benachrichtigung nach**. Aufgenommen wird nie von selbst: erst der Klick auf die
 Benachrichtigung startet die Aufnahme.
 
-Technik (`meeting_detect.py`): Windows führt Buch, welches Programm wann das Mikrofon benutzt hat. Die Einträge
-liegen in der Registry unter `HKCU\Software\Microsoft\Windows\CapabilityAccessManager\ConsentStore\microphone`
-(pro Programm `LastUsedTimeStart` und `LastUsedTimeStop`). Ist Start größer als Stopp, hört das Programm gerade zu.
-Das ist dieselbe Quelle wie die Mikrofon-Anzeige in den Windows-Datenschutz-Einstellungen: keine Rechte nötig, und
-Dictum öffnet das Mikrofon dafür nicht (ein zweiter Zugriff könnte sonst die Aufnahme des Meetings stören).
+Technik (`meeting_detect.py`): Jedes Programm, das ein Mikrofon benutzt, bekommt von Windows eine
+**Audio-Sitzung** auf dem Aufnahmegerät (dasselbe System wie der Lautstärkemixer, nur für Aufnahme). Sie ist
+*aktiv*, solange das Programm wirklich aufnimmt, und *inaktiv*, wenn es nur geöffnet ist (Teams und Zoom haben auch
+im Leerlauf eine). Dictum fragt über `pycaw` alle Aufnahmegeräte nach aktiven Sitzungen und liest den Programmnamen
+dazu (`psutil`). Das öffnet das Mikrofon nicht und stört kein Meeting.
+
+Der erste Versuch las die Registry (`ConsentStore\microphone`, die Quelle der Mikrofon-Anzeige in den
+Windows-Datenschutz-Einstellungen). Auf diesem PC hat Windows diese Einträge seit Wochen nicht mehr aktualisiert,
+auch für Dictum selbst nicht, die Erkennung hätte also nie angeschlagen. Das ließ sich nur am echten PC mit einem
+Beobachtungsskript feststellen (`scripts/check_meeting_detect.py --watch 60`). Die Audio-Sitzungen laufen dagegen
+live.
+
+Zwei Fallen dabei: Die Abfrage braucht einen eigenen Thread mit eigener COM-Initialisierung (der Qt-Thread
+verträgt sich nicht damit, ein hängender Aufruf darf die Oberfläche nie festhalten), und alle COM-Objekte müssen
+freigegeben sein, **bevor** `CoUninitialize` läuft, sonst stürzt der Prozess ab (Segmentation fault, beobachtet).
 
 - Es zählen nur Programme aus `detect_apps` (Teile des Programmnamens: Teams, Zoom, Webex, Slack, Discord, Skype,
   WhatsApp und die Browser für Meet). Dictum selbst steht nicht darin, Diktieren löst also nichts aus.
@@ -340,7 +353,7 @@ Dictum öffnet das Mikrofon dafür nicht (ein zweiter Zugriff könnte sonst die 
 - Wurde die Aufnahme über die Frage gestartet und gibt das Programm das Mikrofon 30 Sekunden lang frei, fragt
   Dictum, ob die Aufnahme beendet werden soll. So bleibt keine Aufnahme versehentlich offen. Eine kurze Pause
   im Gespräch löst das nicht aus.
-- Der Blick in die Registry passiert alle 5 Sekunden im vorhandenen Sekundentakt der App.
+- Die Abfrage der Audio-Sitzungen passiert alle 5 Sekunden im vorhandenen Sekundentakt der App.
 
 ### Der Weg eines Meetings
 
@@ -784,6 +797,41 @@ Die Teile im Einzelnen:
 
 Braucht die KI-Bereinigung-Einstellungen (Claude oder OpenAI, mit gültigem Key); dasselbe Modell wie die
 Bereinigung. Ausschalten: Befehls-Taste auf „Aus“.
+
+### Ideen aus OpenWhispr und Handy (`translate.py`, `commands.py`, `hooks.py`, `control.py`)
+
+Im November 2026 habe ich die READMEs und den Quellcode von [OpenWhispr](https://github.com/OpenWhispr/openwhispr)
+(Electron/JavaScript) und [Handy](https://github.com/cjpais/Handy) (Tauri/Rust) gelesen. Beide sind in anderen Sprachen
+geschrieben, deshalb habe ich die Ideen in Python **nachgebaut**, nicht Code kopiert. Alles ist standardmäßig aus oder
+berührt den normalen Ablauf nicht.
+
+| Idee | Woher | Wie es bei Dictum aussieht |
+|---|---|---|
+| Diktat mit Übersetzung | OpenWhispr | Eigene Taste (`hotkey.translate`), Ziel in `[translation] target`. Bereinigen und Übersetzen in **einem** KI-Aufruf. Bei einem Fehler wird nichts eingefügt. |
+| Sprachassistent | OpenWhispr | Eigene Taste (`hotkey.assistant`). Ohne Markierung wird die gesprochene Frage beantwortet und die Antwort eingefügt, mit Markierung wird diese bearbeitet (wie der Command Mode). Kein Fenster und kein Screenshot-Kontext. |
+| Transkriptions-Hook | Handy | `hooks/transcription(.py/.cmd/.bat/.ps1/.exe)` im Datenordner. Bekommt den fertigen Text auf stdin, stdout wird eingefügt. Fehler oder mehr als 30 s → Originaltext, leere Ausgabe → nichts einfügen. Umgebung: `DICTUM_APP`, `DICTUM_MODE`. |
+| Fernsteuerung | Handy | `dictum --toggle`, `--toggle-command`, `--toggle-translate`, `--toggle-assistant`, `--cancel`, `--paste-last`, `--copy-last`, `--toggle-meeting`, `--show`. |
+
+**Warum nicht Handys Silero-VAD?** faster-whisper filtert Stille schon mit Silero (`vad_filter` in `transcriber.py`).
+**Parakeet** (schnelles CPU-Modell) ist noch nicht eingebaut: Es braucht eine zusätzliche Bibliothek und ein großes
+Modell, das erst mit `scripts/compare_models.py` gegen Whisper gemessen werden sollte.
+
+**Die Fernsteuerung im Detail.** Die laufende App öffnet eine benannte Pipe (`\\.\pipe\DictumControl-<Benutzer>`). Ein
+Aufruf wie `dictum --toggle` startet kein zweites Dictum (das wäre am Mutex gescheitert), sondern liest den Schlüssel aus
+`control.key` im Datenordner, schickt den Befehl und beendet sich: Exit-Code 0 bei Erfolg, 1 sonst. Die Pipe ist nur auf
+diesem PC erreichbar; der Schlüssel verhindert, dass beliebige Programme Befehle schicken. Läuft schon eine andere
+Aufnahme, startet `--toggle-…` keine zweite. Praktisch für eine Maus-Zusatztaste über AutoHotkey oder ein Stream Deck.
+
+**Ein Beispiel-Hook** (`hooks/transcription.py`): setzt in Terminalfenstern ein `# ` vor den Text.
+
+```python
+import os, sys
+text = sys.stdin.read()
+print("# " + text if os.environ.get("DICTUM_APP", "").lower() in ("windowsterminal.exe", "cmd.exe") else text)
+```
+
+**Neue Tasten ausprobieren:** Im Fenster unter *Einstellungen* eine Übersetzen- und eine Assistenten-Taste wählen (am
+bequemsten eine Maus-Seitentaste). Beide brauchen die KI-Bereinigung mit gültigem Key, wie der Command Mode.
 
 ### Stile pro Programm und Kontext (`styles.py`, `context.py`)
 

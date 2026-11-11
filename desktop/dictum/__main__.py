@@ -65,7 +65,29 @@ def _main() -> None:
                         help="Verknüpfungen anlegen und Autostart einschalten (für die installierte .exe)")
     parser.add_argument("--restart", action="store_true",
                         help="Neustart: wartet, bis die alte Instanz beendet ist")
+    # Fernsteuerung des laufenden Dictum (siehe control.py): schickt den Befehl und beendet sich gleich wieder
+    remote = parser.add_argument_group("Fernsteuerung (Befehl an das laufende Dictum schicken)")
+    for name, text in (
+        ("toggle", "Diktat starten bzw. beenden"),
+        ("toggle-command", "Command Mode starten bzw. beenden"),
+        ("toggle-translate", "Diktat mit Übersetzung starten bzw. beenden"),
+        ("toggle-assistant", "Sprachassistent starten bzw. beenden"),
+        ("cancel", "laufende Aufnahme verwerfen"),
+        ("paste-last", "letztes Diktat noch einmal einfügen"),
+        ("copy-last", "letztes Diktat kopieren"),
+        ("toggle-meeting", "Meeting-Aufnahme starten bzw. beenden"),
+        ("show", "Dictum-Fenster öffnen"),
+    ):
+        remote.add_argument(f"--{name}", dest="remote", action="store_const", const=name, help=text)
     args = parser.parse_args()
+
+    if args.remote:
+        from . import control
+
+        ok, message = control.send_command(args.remote)
+        if sys.stdout:  # unter pythonw (ohne Konsole) gibt es keine Ausgabe
+            print(message if not ok else f"Dictum: {args.remote} ok")
+        sys.exit(0 if ok else 1)
 
     ensure_user_dir()  # nur als Programm (.exe): Datenordner und Standard-Einstellungen anlegen
     setup_logging()

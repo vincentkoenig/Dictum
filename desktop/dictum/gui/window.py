@@ -80,6 +80,7 @@ from .labels import (
     PROVIDER_LABELS,
     TEMPLATE_LABELS,
     THEME_LABELS,
+    TRANSLATION_LABELS,
 )
 from .stats_tab import StatsTab, de
 from .styles_tab import StylesTab
@@ -559,6 +560,10 @@ class SettingsTab(QWidget):
         self.command = HotkeyField(app, hk.command, optional=True)
         self.paste_last = HotkeyField(app, hk.paste_last, optional=True)
         self.copy_last = HotkeyField(app, hk.copy_last, optional=True)
+        self.translate_key = HotkeyField(app, hk.translate, optional=True)
+        self.assistant_key = HotkeyField(app, hk.assistant, optional=True)
+        self.translate_target = QComboBox()
+        _fill(self.translate_target, TRANSLATION_LABELS)
         self.mode = QComboBox()
         _fill(self.mode, MODE_LABELS)
         self.language = QComboBox()
@@ -622,6 +627,9 @@ class SettingsTab(QWidget):
         form.addRow("Diktier-Taste:", self.hotkey)
         form.addRow("Bedienung:", self.mode)
         form.addRow("Befehls-Taste (Text umschreiben):", self.command)
+        form.addRow("Übersetzen-Taste (sprechen, anderssprachig einfügen):", self.translate_key)
+        form.addRow("Übersetzen nach:", self.translate_target)
+        form.addRow("Assistenten-Taste (Frage stellen, Antwort einfügen):", self.assistant_key)
         form.addRow("Letztes Diktat einfügen:", self.paste_last)
         form.addRow("Letztes Diktat kopieren:", self.copy_last)
         form.addRow("Sprache:", self.language)
@@ -716,6 +724,11 @@ class SettingsTab(QWidget):
         self.command.set_keys(s.hotkey.command)
         self.paste_last.set_keys(s.hotkey.paste_last)
         self.copy_last.set_keys(s.hotkey.copy_last)
+        self.translate_key.set_keys(s.hotkey.translate)
+        self.assistant_key.set_keys(s.hotkey.assistant)
+        if self.translate_target.findData(s.translation.target) < 0:  # Code von Hand in settings.toml eingetragen
+            self.translate_target.addItem(s.translation.target, s.translation.target)
+        _select(self.translate_target, s.translation.target)
         _select(self.mode, app.get("mode"))
         _select(self.language, app.get("language"))
         _select(self.engine, app.get("engine"))
@@ -765,7 +778,9 @@ class SettingsTab(QWidget):
                 "keys": self.hotkey.keys, "mode": self.mode.currentData(),
                 "command": self.command.keys, "paste_last": self.paste_last.keys,
                 "copy_last": self.copy_last.keys, "max_minutes": self.max_minutes.value(),
+                "translate": self.translate_key.keys, "assistant": self.assistant_key.keys,
             },
+            "translation": {"target": self.translate_target.currentData()},
             "transcription": {
                 "language": self.language.currentData(),
                 "engine": self.engine.currentData(),

@@ -67,6 +67,14 @@ class HotkeySettings:
     command: list[str] = field(default_factory=lambda: ["f9"])   # Command Mode, [] = aus
     paste_last: list[str] = field(default_factory=lambda: ["shift", "alt", "z"])
     copy_last: list[str] = field(default_factory=lambda: ["shift", "alt", "x"])
+    # Diktat mit Übersetzung (Ziel: [translation] target) und Sprachassistent (Frage → Antwort), [] = aus
+    translate: list[str] = field(default_factory=list)
+    assistant: list[str] = field(default_factory=list)
+
+
+@dataclass
+class TranslationSettings:
+    target: str = "en"   # Sprache, in der die Übersetzen-Taste einfügt (Code wie "en", "fr" – siehe translate.py)
 
 
 @dataclass
@@ -182,6 +190,7 @@ class Settings:
     recording: RecordingSettings = field(default_factory=RecordingSettings)
     insert: InsertSettings = field(default_factory=InsertSettings)
     ui: UiSettings = field(default_factory=UiSettings)
+    translation: TranslationSettings = field(default_factory=TranslationSettings)
 
 
 def load_settings(path: Path = DEFAULT_PATH) -> Settings:
@@ -205,6 +214,7 @@ def load_settings(path: Path = DEFAULT_PATH) -> Settings:
         recording=RecordingSettings(**data.get("recording", {})),
         insert=InsertSettings(**data.get("insert", {})),
         ui=UiSettings(**data.get("ui", {})),
+        translation=TranslationSettings(**data.get("translation", {})),
     )
     _validate(settings)
     return settings
@@ -215,11 +225,14 @@ def _validate(settings: Settings) -> None:
     als ein rätselhafter Fehler mitten im Diktat."""
     hk = settings.hotkey
     for name, keys, optional in (("keys", hk.keys, False), ("command", hk.command, True),
-                                 ("paste_last", hk.paste_last, True), ("copy_last", hk.copy_last, True)):
+                                 ("paste_last", hk.paste_last, True), ("copy_last", hk.copy_last, True),
+                                 ("translate", hk.translate, True), ("assistant", hk.assistant, True)):
         problem = check_hotkey(keys, allow_empty=optional)
         if problem:
             raise ValueError(f"hotkey.{name}: {problem}")
-    chosen = [set(k) for k in (hk.keys, hk.command, hk.paste_last, hk.copy_last) if k]
+    if not settings.translation.target.strip():
+        raise ValueError("translation.target darf nicht leer sein (z. B. \"en\").")
+    chosen = [set(k) for k in (hk.keys, hk.command, hk.paste_last, hk.copy_last, hk.translate, hk.assistant) if k]
     for index, first in enumerate(chosen):
         for second in chosen[index + 1:]:
             if first <= second or second <= first:

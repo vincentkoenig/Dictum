@@ -9,6 +9,9 @@ supabase/functions/.env
 desktop/dictionary.txt
 desktop/snippets.toml
 desktop/replacements.toml
+desktop/hooks/
+desktop/control.key
+desktop/start.log
 desktop/logs/
 desktop/data/
 desktop/build/

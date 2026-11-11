@@ -3,6 +3,8 @@ Steht an einer Stelle, damit beide immer dieselben Wörter benutzen."""
 
 from __future__ import annotations
 
+from ..translate import LANGUAGE_NAMES
+
 MODE_LABELS = {
     "both": "Halten oder Antippen",
     "hold": "Nur Halten",
@@ -13,6 +15,7 @@ LANGUAGE_LABELS = {
     "en": "Englisch",
     "auto": "Automatisch (langsamer)",
 }
+TRANSLATION_LABELS = dict(LANGUAGE_NAMES)   # Zielsprachen der Übersetzen-Taste
 ENGINE_LABELS = {
     "local": "Lokal (privat, kostenlos)",
     "openai": "OpenAI-Cloud (schneller)",

@@ -24,6 +24,7 @@ Der Weg eines Diktats im Worker (`_process`):
 
 from __future__ import annotations
 
+import faulthandler
 import logging
 import os
 import queue
@@ -38,11 +39,12 @@ from PySide6.QtCore import QObject, QTimer, Signal
 from PySide6.QtWidgets import QApplication
 
 from .gui import theme
-from . import autostart, commands, context, costs, layout, learn, levels, media, replacements, shortcuts, sounds, styles
+from . import (autostart, commands, context, control, costs, hooks, layout, learn, levels, media, replacements,
+               shortcuts, sounds, styles, translate)
 from .audio import Recorder, duration_seconds
 from .cleanup import clean_text
 from .cloud_transcriber import OpenAITranscriber
-from .config import REPO_ROOT, Settings, load_env
+from .config import DESKTOP_DIR, REPO_ROOT, Settings, load_env
 from .gui.icons import mic_icon
 from .gui.overlay import Overlay
 from .gui.tray import Tray
@@ -66,6 +68,8 @@ from .vocabulary import (
 )
 
 log = logging.getLogger(__name__)
+
+HOOKS_DIR = DESKTOP_DIR / "hooks"   # hier liegt der optionale Transkriptions-Hook (siehe hooks.py)
 
 
 class _Bus(QObject):
@@ -122,15 +126,12 @@ class DictumApp:
         )
         self.listener = HotkeyListener(settings.hotkey.keys, self.machine)
         # Command Mode: eigene Zustandsmaschine mit denselben Regeln (Halten/Antippen, Esc)
-        self.command_machine = HotkeyStateMachine(
-            on_start=self._command_start,
-            on_stop=self._command_stop,
-            on_cancel=self._cancel,
-            mode=settings.hotkey.mode,
-            hold_threshold=settings.hotkey.hold_threshold,
-        )
-        self._command_mode = False  # läuft gerade eine Befehls-Aufnahme?
-        self.listener.add_machine("command", settings.hotkey.command, self.command_machine)
+        self.command_machine = self._voice_machine("command", settings)
+        # Übersetzen und Assistent: zwei weitere Maschinen mit denselben Regeln (Halten/Antippen, Esc)
+        self.translate_machine = self._voice_machine("translate", settings)
+        self.assistant_machine = self._voice_machine("assistant", settings)
+        self._mode = "dictate"  # was die laufende Aufnahme wird: dictate, command, translate oder assistant
+        self._set_voice_hotkeys(settings.hotkey)
         self._last_text = ""  # zuletzt eingefügter Text (für "erneut einfügen" / "kopieren")
         self._set_extra_hotkeys(settings.hotkey)
         # Meetings: braucht notify/refresh vom Tray – das Tray braucht die Meetings fürs
@@ -155,8 +156,29 @@ class DictumApp:
         ensure_user_files()
         replacements.ensure_file()
 
+    def _voice_machine(self, mode: str, settings: Settings) -> HotkeyStateMachine:
+        """Zustandsmaschine für eine Sprach-Taste, die statt eines Diktats `mode` aufnimmt."""
+        return HotkeyStateMachine(
+            on_start=lambda: self._voice_start(mode),
+            on_stop=self._stop,
+            on_cancel=self._cancel,
+            mode=settings.hotkey.mode,
+            hold_threshold=settings.hotkey.hold_threshold,
+        )
+
+    def _machines(self) -> tuple[HotkeyStateMachine, ...]:
+        return self.machine, self.command_machine, self.translate_machine, self.assistant_machine
+
+    def _set_voice_hotkeys(self, hk) -> None:
+        self.listener.add_machine("command", hk.command, self.command_machine)
+        self.listener.add_machine("translate", hk.translate, self.translate_machine)
+        self.listener.add_machine("assistant", hk.assistant, self.assistant_machine)
+
     def run(self) -> int:
         threading.Thread(target=self._load_model, daemon=True).start()
+        # Fernsteuerung (dictum --toggle usw., siehe control.py)
+        self.control = control.ControlServer(self.remote)
+        self.control.start()
         threading.Thread(target=self._worker, daemon=True).start()
         self.listener.start()
         self.tray.start()
@@ -185,15 +207,47 @@ class DictumApp:
         """Aus jedem Thread aufrufbar: Das eigentliche Beenden läuft im Hauptthread."""
         self._bus.quit_requested.emit()
 
+    QUIT_TIMEOUT = 10.0  # Sekunden, danach wird das Beenden erzwungen (siehe _force_exit)
+
     def _do_quit(self) -> None:
         log.info("Beende Dictum …")
-        # Laufendes Meeting sauber abschließen – der Upload passiert beim nächsten Start
-        self.meetings.stop()
-        self.ducker.shutdown()  # Lautstärke der anderen Programme zurückstellen, falls gerade aufgenommen wird
-        self.listener.stop()
-        self._jobs.put(None)  # Signal an den Worker: aufhören
-        self.tray.stop()
-        self.qt.quit()
+        watchdog = threading.Timer(self.QUIT_TIMEOUT, self._force_exit)
+        watchdog.daemon = True
+        watchdog.start()
+        # Jeder Schritt für sich: Wirft einer einen Fehler, laufen die übrigen trotzdem. Sonst bliebe ein
+        # halb beendetes Dictum zurück (Fenster und Tasten leben, der Hintergrund-Thread ist weg: Diktate
+        # hängen für immer bei "Transkribiert"). In einem Qt-Slot verschwindet so ein Fehler außerdem still.
+        steps = (
+            # Laufendes Meeting sauber abschließen – der Upload passiert beim nächsten Start
+            ("Meeting", self.meetings.stop),
+            # Lautstärke der anderen Programme zurückstellen, falls gerade aufgenommen wird
+            ("Ton", self.ducker.shutdown),
+            ("Fernsteuerung", lambda: getattr(self, "control", None) and self.control.stop()),
+            ("Tasten", self.listener.stop),
+            ("Hintergrund-Thread", lambda: self._jobs.put(None)),  # Signal an den Worker: aufhören
+            ("Tray", self.tray.stop),
+            ("Qt", self.qt.quit),
+        )
+        for name, action in steps:
+            try:
+                action()
+            except Exception:
+                log.exception("Beenden: Schritt '%s' fehlgeschlagen", name)
+            else:
+                log.info("Beenden: %s erledigt", name)
+
+    def _force_exit(self) -> None:
+        """Notbremse: Hängt das Beenden, schreibt sie die Stapel aller Threads ins Log (damit man sieht, wo)
+        und beendet den Prozess hart. So bleibt keine Instanz übrig, die den nächsten Start blockiert."""
+        log.error("Beenden hängt seit %.0f s – erzwinge das Ende. Stapel aller Threads folgen im Log.",
+                  self.QUIT_TIMEOUT)
+        try:
+            with open(LOG_PATH, "a", encoding="utf-8") as f:
+                faulthandler.dump_traceback(file=f, all_threads=True)
+        except Exception:
+            pass
+        logging.shutdown()
+        os._exit(0)
 
     def show_window(self) -> None:
         self._bus.show_window.emit()
@@ -226,7 +280,8 @@ class DictumApp:
 
     def set(self, setting: str, value) -> None:
         if setting == "mode":
-            self.machine.mode = self.command_machine.mode = value
+            for machine in self._machines():
+                machine.mode = value
         elif setting == "language":
             self.local.language = self.cloud.language = value
         elif setting == "engine":
@@ -261,9 +316,9 @@ class DictumApp:
         if new.ui.theme != old.ui.theme:
             theme.apply(self.qt, new.ui.theme)
         self.tray.set_hotkey_label(self.hotkey_text)
-        self.machine.mode = self.command_machine.mode = new.hotkey.mode
-        self.machine.hold_threshold = self.command_machine.hold_threshold = new.hotkey.hold_threshold
-        self.listener.add_machine("command", new.hotkey.command, self.command_machine)
+        for machine in self._machines():
+            machine.mode, machine.hold_threshold = new.hotkey.mode, new.hotkey.hold_threshold
+        self._set_voice_hotkeys(new.hotkey)
         self.local.language = self.cloud.language = new.transcription.language
         self.local.fallback_language = new.transcription.fallback_language
         self.engine = new.transcription.engine
@@ -276,7 +331,7 @@ class DictumApp:
         # MeetingController bei jedem Meeting liest. Es ist dasselbe Objekt wie bisher,
         # deshalb sehen alle Beteiligten die neuen Werte sofort.
         for section in ("hotkey", "transcription", "cleanup", "meeting", "history", "dictionary", "styles",
-                        "context", "feedback", "recording", "insert", "ui"):
+                        "context", "feedback", "recording", "insert", "ui", "translation"):
             setattr(old, section, getattr(new, section))
         log.info("Einstellungen übernommen (Neustart nötig für: %s)", ", ".join(needs_restart) or "nichts")
         return needs_restart
@@ -417,8 +472,8 @@ class DictumApp:
     def _limit_reached(self) -> None:
         log.info("Zeitlimit der Aufnahme erreicht – beende sie")
         self.overlay.flash("Zeitlimit erreicht – Aufnahme beendet", seconds=3)
-        self.machine.finish()
-        self.command_machine.finish()
+        for machine in self._machines():
+            machine.finish()
 
     def _stop(self) -> None:
         self._disarm_limit()
@@ -428,24 +483,22 @@ class DictumApp:
         self._beep(660)
         ready = self.engine == "openai" or self.local.is_ready
         self.overlay.show("transcribing" if ready else "loading")
-        self._jobs.put((audio, self._target, self._command_mode))
-        self._command_mode = False
+        self._jobs.put((audio, self._target, self._mode))
+        self._mode = "dictate"
 
-    def _command_start(self) -> None:
-        """Command-Taste gedrückt: Es wird die Anweisung aufgenommen, nicht ein Diktat."""
-        self._command_mode = True
+    def _voice_start(self, mode: str) -> None:
+        """Sprach-Taste (Befehl, Übersetzen, Assistent) gedrückt: Es wird die Anweisung bzw. der zu übersetzende
+        Text aufgenommen, kein gewöhnliches Diktat."""
+        self._mode = mode
         self._start()
         if self.recorder.is_recording:
-            self.overlay.show("command")
+            self.overlay.show(mode)
         else:
-            self._command_mode = False
-
-    def _command_stop(self) -> None:
-        self._stop()
+            self._mode = "dictate"
 
     def _cancel(self) -> None:
         self._disarm_limit()
-        self._command_mode = False
+        self._mode = "dictate"
         self.recorder.stop()
         self.ducker.restore()
         self.overlay.hide()
@@ -472,9 +525,17 @@ class DictumApp:
                 self.overlay.flash("Fehler – siehe Logdatei")
 
     def _process(self, audio: np.ndarray, target: context.ActiveWindow | None = None,
-                 command: bool = False) -> None:
-        if command:
+                 mode: str | bool = "dictate") -> None:
+        if mode is True:  # ältere Aufrufe: True = Command Mode
+            mode = "command"
+        if mode == "command":
             self._process_command(audio, target)
+            return
+        if mode == "translate":
+            self._process_translate(audio, target)
+            return
+        if mode == "assistant":
+            self._process_assistant(audio, target)
             return
         # Wörterbuch und Snippets bei jedem Diktat frisch lesen – so wirken Änderungen
         # an den Dateien sofort, ohne Neustart (die Dateien sind winzig)
@@ -507,6 +568,9 @@ class DictumApp:
         t2 = time.perf_counter()
 
         log.info("Fertig: Erkennung %.1f s · Bereinigung %.1f s → %r", t1 - t0, t2 - t1, text)
+        text = self._hooked(text, target, "dictate")
+        if text is None:
+            return
         self.overlay.hide()
         self._last_text = text
         insert_text(text, target, smart_spacing=self.settings.insert.smart_spacing)
@@ -528,10 +592,69 @@ class DictumApp:
             self.overlay.flash(str(error), seconds=3)
             return
         log.info("Command Mode: %r auf %d Zeichen → %d Zeichen", instruction, len(selection), len(result))
+        result = self._hooked(result, target, "command")
+        if result is None:
+            return
         self.overlay.hide()
         self._last_text = result
         insert_text(result, target)  # ersetzt die Markierung (oder landet an der Schreibstelle)
         self._remember(instruction, result, audio, True, False, target)
+
+    def _process_translate(self, audio: np.ndarray, target: context.ActiveWindow | None) -> None:
+        """Diktat mit Übersetzung: erkennen, in einem KI-Schritt bereinigen und übersetzen, einfügen."""
+        dictionary = load_dictionary()
+        raw = self._transcribe(audio, dictionary, target)
+        if not raw:
+            self.overlay.flash("Nichts erkannt")
+            return
+        raw = replacements.apply_replacements(raw, replacements.load_replacements())
+        self.overlay.show("translate_working")
+        try:
+            result = translate.translate_text(raw, self.settings.translation.target, self.provider, dictionary)
+        except translate.TranslateError as error:
+            self.overlay.flash(str(error), seconds=3)
+            return
+        log.info("Übersetzt nach %s: %r → %r", self.settings.translation.target, raw, result)
+        result = self._hooked(result, target, "translate")
+        if result is None:
+            return
+        self.overlay.hide()
+        self._last_text = result
+        insert_text(result, target, smart_spacing=self.settings.insert.smart_spacing)
+        self._remember(raw, result, audio, True, False, target)
+
+    def _process_assistant(self, audio: np.ndarray, target: context.ActiveWindow | None) -> None:
+        """Sprachassistent: Frage erkennen und beantworten. Mit Markierung wird diese stattdessen bearbeitet."""
+        dictionary = load_dictionary()
+        question = self._transcribe(audio, dictionary, target)
+        if not question:
+            self.overlay.flash("Keine Frage erkannt")
+            return
+        selection = copy_selection()
+        self.overlay.show("assistant_working")
+        try:
+            result = commands.run_assistant(question, selection, self.provider, dictionary)
+        except commands.CommandError as error:
+            self.overlay.flash(str(error), seconds=3)
+            return
+        log.info("Assistent: %r (Markierung: %d Zeichen) → %d Zeichen", question, len(selection), len(result))
+        result = self._hooked(result, target, "assistant")
+        if result is None:
+            return
+        self.overlay.hide()
+        self._last_text = result
+        insert_text(result, target)
+        self._remember(question, result, audio, True, False, target)
+
+    def _hooked(self, text: str, target: context.ActiveWindow | None, mode: str) -> str | None:
+        """Text durch den optionalen Transkriptions-Hook schicken (siehe hooks.py). None = der Hook will,
+        dass nichts eingefügt wird."""
+        out = hooks.apply(text, HOOKS_DIR, app=target.app if target else "", mode=mode)
+        if text and not out:
+            log.info("Hook: leere Ausgabe – nichts wird eingefügt")
+            self.overlay.flash("Hook: nichts einzufügen")
+            return None
+        return out
 
     def _learn_async(self, text: str, target: context.ActiveWindow | None) -> None:
         """Lern-Wörterbuch: ein paar Sekunden später prüfen, ob du ein Wort korrigiert hast."""
@@ -643,9 +766,37 @@ class DictumApp:
 
     def bar_clicked(self) -> None:
         """Klick auf die Flow Bar: Diktat starten bzw. beenden (wie zweimal die Taste antippen)."""
-        for machine in (self.machine, self.command_machine):
-            if machine.state == State.TOGGLED:
-                machine.finish()
-                return
-        if self.machine.state == State.IDLE and self.command_machine.state == State.IDLE:
-            self.machine.start_toggled()
+        self._toggle(self.machine)
+
+    def _toggle(self, machine: HotkeyStateMachine) -> str:
+        """Aufnahme der Maschine starten, oder beenden, wenn sie (nach Antippen) läuft. Läuft schon eine andere
+        Aufnahme, passiert nichts."""
+        for other in self._machines():
+            if other.state == State.TOGGLED:
+                if other is machine:
+                    machine.finish()
+                    return "ok"
+                return "Eine andere Aufnahme läuft gerade."
+            if other.state != State.IDLE:
+                return "Eine andere Aufnahme läuft gerade."
+        machine.start_toggled()
+        return "ok"
+
+    def remote(self, command: str) -> str:
+        """Befehl von `dictum --toggle` & Co. (siehe control.py). Läuft im Thread der Fernsteuerung."""
+        machines = {"toggle": self.machine, "toggle-command": self.command_machine,
+                    "toggle-translate": self.translate_machine, "toggle-assistant": self.assistant_machine}
+        if command in machines:
+            return self._toggle(machines[command])
+        if command == "cancel":
+            for machine in self._machines():
+                machine.escape()
+        elif command == "paste-last":
+            self.paste_last()
+        elif command == "copy-last":
+            self.copy_last()
+        elif command == "toggle-meeting":
+            self.toggle_meeting()
+        elif command == "show":
+            self.show_window()
+        return "ok"
