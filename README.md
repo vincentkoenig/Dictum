@@ -29,6 +29,10 @@ Tippen ist langsam, und fertige Diktier-Dienste schicken jedes Wort an einen fre
 - **Stile pro Programm**: locker in WhatsApp, förmlich in Outlook, neutral im Editor. Erkannt über das Programm oder bei Browsern über den Fenstertitel. Ein Stil ändert nur Groß-/Kleinschreibung und Satzzeichen, nie die Wörter
 - **Kontext für Namen**: Der Fenstertitel („Re: Angebot Müller GmbH“) und auf Wunsch der Text im Eingabefeld helfen der KI, Namen richtig zu schreiben
 - **Command Mode**: Text markieren, eine Taste halten, eine Anweisung sprechen („mach das kürzer“, „übersetze ins Englische“). Das Ergebnis ersetzt die Markierung, Strg+Z macht es rückgängig. Ohne Markierung schreibt die KI einen neuen Text
+- **Diktat mit Übersetzung** (auf Wunsch, Idee von OpenWhispr): eigene Taste, in Sprache A sprechen, in Sprache B einfügen. Bereinigen und Übersetzen laufen in einem KI-Aufruf, bei einem Fehler wird nichts eingefügt
+- **Sprachassistent** (auf Wunsch, Idee von OpenWhispr): eigene Taste, Frage sprechen, die Antwort wird an der Schreibstelle eingefügt. Mit Markierung wird der Text stattdessen bearbeitet. Es ist eine reine KI ohne Zugriff auf deinen Rechner
+- **Transkriptions-Hook** (Idee von Handy): Ein eigenes Skript (`hooks/transcription.py`, `.cmd`, `.ps1` …) bekommt den fertigen Text vor dem Einfügen und kann ihn umschreiben. Bei Fehler oder nach 30 Sekunden gilt der Originaltext
+- **Fernsteuerung** (Idee von Handy): `Dictum.exe --toggle`, `--cancel`, `--paste-last` und weitere Befehle steuern das laufende Dictum, z. B. per AutoHotkey oder Stream Deck
 - **Wörterbuch, Textbausteine und Lern-Wörterbuch**: Namen und Fachbegriffe verbessern Erkennung und Bereinigung, Textbausteine werden per Zuruf eingefügt, und auf Wunsch lernt Dictum aus deinen Korrekturen im Textfeld
 - **Feste Ersetzungen** (`replacements.toml`): „super base“ wird immer zu „Supabase“, auch ohne KI und ohne Internet
 - **Intelligenter Abstand** (auf Wunsch): Steht der Cursor direkt hinter einem Wort, setzt Dictum das Leerzeichen davor
@@ -79,7 +83,7 @@ Tippen ist langsam, und fertige Diktier-Dienste schicken jedes Wort an einen fre
 - **PySide6 (Qt)** – Fenster, Flow Bar, Tray-Symbol, Dark Mode, eigenes Stylesheet
 - **faster-whisper** – lokale Spracherkennung auf der CPU (Modell „small“, Sprachfilter, Wörterbuch als Hinweis)
 - **OpenAI API** – optionale Cloud-Erkennung (`gpt-4o-mini-transcribe`) und alternative Bereinigung
-- **Claude API** – Standard für die Bereinigung und den Command Mode (Haiku 5.5)
+- **Claude API** – Standard für die Bereinigung, den Command Mode, das Übersetzen und den Assistenten (Haiku 5.5)
 - **pynput** – globale Hotkeys inklusive Maustasten, Tastendruck simulieren
 - **pywin32, psutil, uiautomation** – Zwischenablage mit allen Formaten, aktives Programm, Text im Feld lesen
 - **pycaw** – Lautstärke einzelner Programme im Windows-Mixer (Ton beim Diktieren senken)
@@ -119,7 +123,7 @@ Ausführlich: [docs/ARCHITEKTUR.md](docs/ARCHITEKTUR.md) · Fachbegriffe: [docs/
 
 - **Erkennung und Bereinigung getrennt**: Whisper erzeugt den Rohtext, ein Sprachmodell poliert ihn nur. Die Bereinigung ist als „Werkzeug, kein Assistent“ gebaut: Diktiert man „Schreib eine Mail an Tom“, landet genau dieser Satz im Feld. Eine Plausibilitätsprüfung (zu lang, zu kurz, leer) fällt bei Zweifeln auf den Rohtext zurück, und bei jedem Fehler (offline, kein Key) wird der Rohtext eingefügt. Diktieren funktioniert also **immer**
 - **Austauschbare Anbieter**: Erkennung lokal oder bei OpenAI, Bereinigung bei Claude oder OpenAI, alles zur Laufzeit umschaltbar. Eine gemeinsame Schnittstelle (`llm/`) hält den Rest des Codes unabhängig vom Anbieter
-- **Hotkey-Logik ohne Tastatur**: Eine Zustandsmaschine (Halten, Antippen, Abbrechen, Zeitlimit) kennt die echte Tastatur nicht und ist deshalb mit Tests prüfbar. Der Command Mode benutzt dieselbe Maschine mit eigener Taste
+- **Hotkey-Logik ohne Tastatur**: Eine Zustandsmaschine (Halten, Antippen, Abbrechen, Zeitlimit) kennt die echte Tastatur nicht und ist deshalb mit Tests prüfbar. Command Mode, Übersetzen und Assistent benutzen dieselbe Maschine mit eigener Taste
 - **Ein Stil ändert nur die Schreibweise**: So bleibt die Regel „nichts hinzufügen, nichts weglassen“ der Bereinigung bestehen
 - **Datenschutz zuerst**: Kontext und Lern-Wörterbuch lesen Textfelder nur auf Wunsch, Passwortfelder nie, und Audio wird nicht gespeichert (außer du schaltest „Aufnahmen behalten“ ein, dann nur lokal und nur einige Tage). Der Verlauf liegt in einer lokalen SQLite-Datei
 - **Erst speichern, dann hochladen**: Meetings und Handy-Aufnahmen liegen zuerst als Datei in einer Warteschlange. Netzausfall, App-Absturz oder Neustart verlieren nichts
@@ -138,7 +142,9 @@ Dictum/
 │   │   ├── transcriber.py           # lokale Erkennung (faster-whisper)
 │   │   ├── cloud_transcriber.py     # Erkennung über OpenAI
 │   │   ├── cleanup.py, styles.py    # KI-Bereinigung, Stile pro Programm
-│   │   ├── commands.py              # Command Mode
+│   │   ├── commands.py              # Command Mode, Sprachassistent
+│   │   ├── translate.py             # Diktat mit Übersetzung
+│   │   ├── hooks.py, control.py     # Transkriptions-Hook, Fernsteuerung (dictum --toggle …)
 │   │   ├── learn.py                 # Lern-Wörterbuch aus Korrekturen
 │   │   ├── context.py               # aktives Programm, Fenstertitel, Text im Feld
 │   │   ├── inserter.py, clipboard.py  # Einfügen, Zwischenablage mit allen Formaten
@@ -153,7 +159,7 @@ Dictum/
 │   │   ├── llm/                     # Claude und OpenAI hinter einer Schnittstelle
 │   │   └── gui/                     # Fenster, Seiten, Flow Bar, Tray, Dark Mode, Schriften
 │   ├── assets/                      # Symbol, Schriften samt Lizenzen
-│   ├── tests/                       # 221 Tests
+│   ├── tests/                       # 381 Tests
 │   ├── scripts/                     # build_exe.ps1, install_exe.ps1, End-to-End-Skripte
 │   ├── dictum.spec                  # PyInstaller-Bauplan
 │   └── settings.toml                # alle Einstellungen, jede Option kommentiert
@@ -174,6 +180,8 @@ Alle Tasten sind frei wählbar. Das hier sind die Standardwerte (`desktop/settin
 | Diktieren | **Strg rechts** | halten = Push-to-talk, antippen = freihändig |
 | Aufnahme abbrechen | **Esc** | fest eingebaut |
 | Command Mode | **F9** | Text markieren, Anweisung sprechen; `[]` = aus |
+| Übersetzen | aus | eigene Taste im Fenster wählen, Zielsprache unter `[translation] target` |
+| Sprachassistent | aus | eigene Taste im Fenster wählen, Frage sprechen |
 | Letztes Diktat einfügen | Umschalt+Alt+Z | |
 | Letztes Diktat kopieren | Umschalt+Alt+X | |
 | Flow Bar | Klick auf die Blase | startet und beendet ein Diktat |
@@ -227,7 +235,7 @@ Das Supabase-Projekt, die Edge Functions und das Dictum-Konto sind in [supabase/
 
 ```powershell
 cd desktop
-.venv\Scripts\python -m pytest                            # 221 Tests ohne Bildschirm, Mikrofon und Netz
+.venv\Scripts\python -m pytest                            # 381 Tests ohne Bildschirm, Mikrofon und Netz
 ```
 
 Die Oberflächen-Tests laufen mit dem Qt-Plattform-Plugin „offscreen“. Die Zwischenablage-Tests benutzen die echte Zwischenablage und legen den vorherigen Inhalt wieder zurück.
