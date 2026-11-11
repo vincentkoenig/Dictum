@@ -1,10 +1,15 @@
 """Merkt, wann ein Meeting beginnt, und fragt, ob Dictum aufnehmen soll.
 
-Technik: Windows führt für jedes Programm Buch, wann es zuletzt das Mikrofon benutzt hat (das ist die Anzeige
-"Mikrofon wird verwendet" in den Datenschutz-Einstellungen). Die Einträge liegen in der Registry unter
-`HKCU\\Software\\Microsoft\\Windows\\CapabilityAccessManager\\ConsentStore\\microphone`: pro Programm ein Schlüssel mit
-`LastUsedTimeStart` und `LastUsedTimeStop`. Ist Start größer als Stopp (oder Stopp 0), hört das Programm gerade zu.
-Das braucht keine Rechte und kein Mikrofon-Öffnen, Dictum greift also nicht in den Ton ein.
+Technik: Jedes Programm, das ein Mikrofon benutzt, bekommt von Windows eine "Audio-Sitzung" auf dem Aufnahmegerät
+(dasselbe System wie der Lautstärkemixer, nur für Aufnahme). Eine Sitzung ist *aktiv*, solange das Programm wirklich
+Ton aufnimmt, und *inaktiv*, wenn es nur geöffnet ist (Teams und Zoom haben auch im Leerlauf eine). Dictum fragt
+über `pycaw` alle Aufnahmegeräte nach aktiven Sitzungen und liest die Programmnamen dazu. Das öffnet das Mikrofon
+nicht und stört kein Meeting.
+
+Warum nicht die Registry ("ConsentStore\\microphone", die Quelle der Mikrofon-Anzeige in den Datenschutz-Einstellungen)?
+Das war der erste Versuch. Auf diesem PC hat Windows die Einträge seit Wochen nicht mehr aktualisiert, auch für
+Dictum selbst nicht: Die Erkennung hätte nie angeschlagen. Die Audio-Sitzungen laufen live (geprüft mit Teams, Zoom
+und einem offenen Mikrofon).
 
 Regeln, damit es nicht nervt:
 - Es zählen nur Programme aus einer Liste (Teams, Zoom, Browser für Meet …, einstellbar in settings.toml).
@@ -19,56 +24,89 @@ Regeln, damit es nicht nervt:
 from __future__ import annotations
 
 import logging
+import threading
 import time
-import winreg
 from dataclasses import dataclass
 from typing import Callable
 
 log = logging.getLogger(__name__)
 
-CONSENT_KEY = r"Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone"
 END_GRACE = 30.0  # Sekunden ohne Mikrofon, bevor "Meeting vorbei?" kommt
+E_CAPTURE = 1            # Aufnahmegeräte (0 wäre Wiedergabe)
+DEVICE_ACTIVE = 1        # nur eingesteckte, eingeschaltete Geräte
+SESSION_ACTIVE = 1       # Sitzungszustand: 0 inaktiv, 1 aktiv, 2 abgelaufen
+QUERY_TIMEOUT = 3.0      # so lange darf die Abfrage höchstens dauern
 
 # Anzeigenamen für die Nachfrage (Suchbegriff → Name)
 LABELS = {"teams": "Teams", "zoom": "Zoom", "webex": "Webex", "slack": "Slack", "discord": "Discord",
           "skype": "Skype", "whatsapp": "WhatsApp", "chrome": "Chrome", "msedge": "Edge", "firefox": "Firefox"}
 
 
-def apps_using_microphone() -> list[str]:
-    """Namen (klein geschrieben) aller Programme, die das Mikrofon gerade benutzen.
+def _active_capture_names() -> list[str]:
+    """Programmnamen (klein geschrieben) mit aktiver Sitzung auf irgendeinem Aufnahmegerät. Eigener Thread nötig."""
+    import gc
 
-    Store-Apps stehen mit ihrem Paketnamen direkt unter dem Schlüssel ("msteams_8wekyb3d8bbwe"), klassische
-    Programme unter "NonPackaged" mit dem Pfad, in dem "\\" durch "#" ersetzt ist: Wir nehmen den Dateinamen.
-    """
+    import comtypes
+
+    comtypes.CoInitialize()
+    try:
+        return _read_active_sessions()
+    finally:
+        # Alle COM-Objekte müssen freigegeben sein, BEVOR CoUninitialize läuft: Sonst gibt Python sie danach frei
+        # und der Prozess stürzt ab (beobachtet: Segmentation fault).
+        gc.collect()
+        comtypes.CoUninitialize()
+
+
+def _read_active_sessions() -> list[str]:
+    import comtypes
+    import psutil
+    from comtypes import CLSCTX_ALL
+    from pycaw.api.mmdeviceapi import IMMDeviceEnumerator
+    from pycaw.constants import CLSID_MMDeviceEnumerator
+    from pycaw.pycaw import IAudioSessionControl2, IAudioSessionManager2
+
+    enumerator = comtypes.CoCreateInstance(
+        CLSID_MMDeviceEnumerator, IMMDeviceEnumerator, comtypes.CLSCTX_INPROC_SERVER)
+    devices = enumerator.EnumAudioEndpoints(E_CAPTURE, DEVICE_ACTIVE)
     found: list[str] = []
-
-    def scan(path: str, packaged: bool) -> None:
-        try:
-            parent = winreg.OpenKey(winreg.HKEY_CURRENT_USER, path)
-        except OSError:
-            return
-        with parent:
-            index = 0
-            while True:
-                try:
-                    name = winreg.EnumKey(parent, index)
-                except OSError:
-                    break
-                index += 1
-                if name == "NonPackaged":
-                    continue
-                try:
-                    with winreg.OpenKey(parent, name) as key:
-                        start = winreg.QueryValueEx(key, "LastUsedTimeStart")[0]
-                        stop = winreg.QueryValueEx(key, "LastUsedTimeStop")[0]
-                except OSError:
-                    continue
-                if start > stop:
-                    found.append(name.lower() if packaged else name.rsplit("#", 1)[-1].lower())
-
-    scan(CONSENT_KEY, packaged=True)
-    scan(CONSENT_KEY + r"\NonPackaged", packaged=False)
+    for d in range(devices.GetCount()):
+        manager = devices.Item(d).Activate(IAudioSessionManager2._iid_, CLSCTX_ALL, None)
+        sessions = manager.QueryInterface(IAudioSessionManager2).GetSessionEnumerator()
+        for i in range(sessions.GetCount()):
+            control = sessions.GetSession(i)
+            if control.GetState() != SESSION_ACTIVE:
+                continue
+            pid = control.QueryInterface(IAudioSessionControl2).GetProcessId()
+            try:
+                found.append(psutil.Process(pid).name().lower())
+            except Exception:       # Prozess schon weg oder kein Zugriff
+                continue
     return found
+
+
+def apps_using_microphone(timeout: float = QUERY_TIMEOUT) -> list[str]:
+    """Namen aller Programme, die gerade Ton vom Mikrofon aufnehmen (z. B. "zoom.exe", "ms-teams.exe").
+
+    Die Abfrage läuft in einem kurzen eigenen Thread: COM verträgt sich nicht mit dem Qt-Thread, und ein
+    hängender Aufruf soll die Oberfläche nie festhalten."""
+    names: list[str] = []
+    errors: list[BaseException] = []
+
+    def work() -> None:
+        try:
+            names.extend(_active_capture_names())
+        except BaseException as e:  # noqa: BLE001 – wird unten weitergereicht
+            errors.append(e)
+
+    thread = threading.Thread(target=work, name="dictum-mic-query", daemon=True)
+    thread.start()
+    thread.join(timeout)
+    if thread.is_alive():
+        raise TimeoutError("Abfrage der Audio-Sitzungen hängt")
+    if errors:
+        raise errors[0]
+    return names
 
 
 def label_for(name: str, apps: list[str]) -> str:

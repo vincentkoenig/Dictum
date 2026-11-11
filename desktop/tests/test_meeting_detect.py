@@ -1,11 +1,14 @@
 from dictum.config import load_settings
+import pytest
+
+import dictum.meeting_detect as md
 from dictum.meeting_detect import END_GRACE, MeetingDetector, label_for
 
 APPS = ["teams", "zoom", "chrome"]
 
 
 class Mic:
-    """Steuerbare Attrappe für Registry und Uhr."""
+    """Steuerbare Attrappe für Mikrofon-Abfrage und Uhr."""
 
     def __init__(self):
         self.using: list[str] = []
@@ -145,3 +148,27 @@ def test_anzeigenamen():
 def test_standard_ist_aus():
     m = load_settings().meeting
     assert m.auto_detect is False and m.detect_seconds == 10 and "zoom" in m.detect_apps
+
+
+def test_abfrage_liefert_namen_aus_dem_thread(monkeypatch):
+    monkeypatch.setattr(md, "_active_capture_names", lambda: ["zoom.exe"])
+    assert md.apps_using_microphone() == ["zoom.exe"]
+
+
+def test_abfrage_reicht_fehler_weiter(monkeypatch):
+    def boom():
+        raise OSError("COM kaputt")
+
+    monkeypatch.setattr(md, "_active_capture_names", boom)
+    with pytest.raises(OSError):
+        md.apps_using_microphone()
+
+
+def test_haengende_abfrage_blockiert_nicht_ewig(monkeypatch):
+    import threading
+
+    release = threading.Event()
+    monkeypatch.setattr(md, "_active_capture_names", lambda: release.wait(5) or [])
+    with pytest.raises(TimeoutError):
+        md.apps_using_microphone(timeout=0.1)
+    release.set()
