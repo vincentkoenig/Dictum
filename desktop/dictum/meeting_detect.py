@@ -17,6 +17,10 @@ Regeln, damit es nicht nervt:
   und Tests lösen nichts aus). Pro Nutzungsphase fragt Dictum nur einmal.
 - Dictum nimmt **nie von selbst** auf: Die Nachfrage ist eine Benachrichtigung, erst der Klick startet.
   Aufnahmen brauchen die Einwilligung aller Beteiligten (§ 201 StGB).
+- Hilfsprozesse zählen für ihr Hauptprogramm (Zoom hält das Mikrofon oft über `CptHost.exe`).
+- Browser zählen nur, wenn ein Fenster von ihnen nach einem Anruf aussieht (Titel mit Meet, Teams oder Zoom): Ein
+  Browser am Mikrofon kann auch Diktieren auf einer Webseite sein.
+- Dictum selbst (und was es gestartet hat) zählt nie, auch wenn es gerade diktiert.
 - Läuft eine erkannte Aufnahme und das Programm gibt das Mikrofon `END_GRACE` Sekunden lang frei, fragt Dictum, ob es
   die Aufnahme beenden soll. So bleibt keine Aufnahme versehentlich stundenlang offen.
 """
@@ -24,6 +28,8 @@ Regeln, damit es nicht nervt:
 from __future__ import annotations
 
 import logging
+import os
+import re
 import threading
 import time
 from dataclasses import dataclass
@@ -36,6 +42,12 @@ E_CAPTURE = 1            # Aufnahmegeräte (0 wäre Wiedergabe)
 DEVICE_ACTIVE = 1        # nur eingesteckte, eingeschaltete Geräte
 SESSION_ACTIVE = 1       # Sitzungszustand: 0 inaktiv, 1 aktiv, 2 abgelaufen
 QUERY_TIMEOUT = 3.0      # so lange darf die Abfrage höchstens dauern
+
+# Hilfsprozesse → Hauptprogramm (der Hilfsprozess hält das Mikrofon, das Programm steht in der Liste)
+HELPERS = {"cpthost.exe": "zoom.exe", "zoomwebviewhost.exe": "zoom.exe"}
+# Browser: nur mit Hinweis auf einen Anruf im Fenstertitel
+BROWSERS = ("chrome", "msedge", "firefox", "brave", "opera", "vivaldi", "arc.exe")
+WEB_CALL = re.compile(r"\b(meet|teams|zoom)\b", re.IGNORECASE)
 
 # Anzeigenamen für die Nachfrage (Suchbegriff → Name)
 LABELS = {"teams": "Teams", "zoom": "Zoom", "webex": "Webex", "slack": "Slack", "discord": "Discord",
@@ -69,6 +81,11 @@ def _read_active_sessions() -> list[str]:
     enumerator = comtypes.CoCreateInstance(
         CLSID_MMDeviceEnumerator, IMMDeviceEnumerator, comtypes.CLSCTX_INPROC_SERVER)
     devices = enumerator.EnumAudioEndpoints(E_CAPTURE, DEVICE_ACTIVE)
+    own = {os.getpid()}
+    try:
+        own.update(c.pid for c in psutil.Process().children(recursive=True))
+    except Exception:
+        pass
     found: list[str] = []
     for d in range(devices.GetCount()):
         manager = devices.Item(d).Activate(IAudioSessionManager2._iid_, CLSCTX_ALL, None)
@@ -78,11 +95,49 @@ def _read_active_sessions() -> list[str]:
             if control.GetState() != SESSION_ACTIVE:
                 continue
             pid = control.QueryInterface(IAudioSessionControl2).GetProcessId()
+            if pid in own:          # Dictum selbst (diktieren) ist nie ein Meeting
+                continue
             try:
                 found.append(psutil.Process(pid).name().lower())
             except Exception:       # Prozess schon weg oder kein Zugriff
                 continue
     return found
+
+
+def window_titles(process_name: str) -> list[str]:
+    """Titel aller sichtbaren Fenster, die zu Programmen mit diesem Namen gehören (leer, wenn nicht lesbar)."""
+    import ctypes
+    from ctypes import wintypes
+
+    import psutil
+
+    user32 = ctypes.windll.user32
+    titles: list[str] = []
+    names: dict[int, str] = {}
+
+    def owner(pid: int) -> str:
+        if pid not in names:
+            try:
+                names[pid] = psutil.Process(pid).name().lower()
+            except Exception:
+                names[pid] = ""
+        return names[pid]
+
+    @ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    def visit(hwnd, _):
+        if user32.IsWindowVisible(hwnd):
+            n = user32.GetWindowTextLengthW(hwnd)
+            if n:
+                buf = ctypes.create_unicode_buffer(n + 1)
+                user32.GetWindowTextW(hwnd, buf, n + 1)
+                pid = wintypes.DWORD()
+                user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+                if process_name in owner(pid.value):
+                    titles.append(buf.value)
+        return True
+
+    user32.EnumWindows(visit, 0)
+    return titles
 
 
 def apps_using_microphone(timeout: float = QUERY_TIMEOUT) -> list[str]:
@@ -125,10 +180,12 @@ class Detection:
 class MeetingDetector:
     def __init__(self, apps: list[str], seconds: float,
                  reader: Callable[[], list[str]] = apps_using_microphone,
-                 clock: Callable[[], float] = time.monotonic) -> None:
+                 clock: Callable[[], float] = time.monotonic,
+                 titles: Callable[[str], list[str]] = window_titles) -> None:
         self.apps = apps
         self.seconds = seconds
         self._reader = reader
+        self._titles = titles
         self._clock = clock
         self._since: dict[str, float] = {}      # Programm → seit wann es das Mikrofon belegt
         self._asked: set[str] = set()           # Programme, bei denen in dieser Phase schon gefragt wurde
@@ -145,7 +202,17 @@ class MeetingDetector:
             self._failed = True
             return set()
         wanted = [a.lower() for a in self.apps]
-        return {n for n in names if any(a in n for a in wanted)}
+        names = [HELPERS.get(n, n) for n in names]
+        return {n for n in names if any(a in n for a in wanted) and self._is_call(n)}
+
+    def _is_call(self, name: str) -> bool:
+        """Browser nur mit Anruf-Hinweis im Fenstertitel; das gerade beobachtete Programm bleibt dabei (Tabwechsel)."""
+        if name == self._watching or not any(b in name for b in BROWSERS):
+            return True
+        try:
+            return any(WEB_CALL.search(t) for t in self._titles(name))
+        except Exception:
+            return False
 
     def poll(self, recording: bool) -> Detection | None:
         """Alle paar Sekunden aufrufen. `recording`: läuft gerade eine Meeting-Aufnahme?"""

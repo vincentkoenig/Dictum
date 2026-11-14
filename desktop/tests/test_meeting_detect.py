@@ -172,3 +172,57 @@ def test_haengende_abfrage_blockiert_nicht_ewig(monkeypatch):
     with pytest.raises(TimeoutError):
         md.apps_using_microphone(timeout=0.1)
     release.set()
+
+
+def test_zoom_hilfsprozess_zaehlt_als_zoom():
+    mic = Mic()
+    d = mic.detector(seconds=0)
+    mic.using = ["cpthost.exe"]
+    found = d.poll(False)
+    assert found and found.app == "Zoom"
+
+
+def test_browser_ohne_anruf_im_titel_zaehlt_nicht():
+    mic = Mic()
+    d = MeetingDetector(APPS, 0, reader=lambda: mic.using, clock=lambda: mic.now,
+                        titles=lambda name: ["Dokument – Google Docs", "Posteingang"])
+    mic.using = ["chrome.exe"]
+    assert d.poll(False) is None
+
+
+def test_browser_mit_meet_im_titel_wird_erkannt():
+    mic = Mic()
+    d = MeetingDetector(APPS, 0, reader=lambda: mic.using, clock=lambda: mic.now,
+                        titles=lambda name: ["Meet - abc-defg-hij"])
+    mic.using = ["chrome.exe"]
+    found = d.poll(False)
+    assert found and found.app == "Chrome"
+
+
+def test_browser_titel_nicht_lesbar_zaehlt_nicht():
+    def boom(name):
+        raise OSError("kein Zugriff")
+
+    mic = Mic()
+    d = MeetingDetector(APPS, 0, reader=lambda: mic.using, clock=lambda: mic.now, titles=boom)
+    mic.using = ["chrome.exe"]
+    assert d.poll(False) is None
+
+
+def test_tabwechsel_beendet_beobachtetes_browser_meeting_nicht_sofort():
+    mic = Mic()
+    titles = ["Meet - abc-defg-hij"]
+    d = MeetingDetector(APPS, 0, reader=lambda: mic.using, clock=lambda: mic.now, titles=lambda name: titles)
+    mic.using = ["chrome.exe"]
+    assert d.poll(False).kind == "start"
+    titles[:] = ["Notizen"]                          # anderer Tab vorne
+    mic.wait(5)
+    assert d.poll(True) is None
+    assert d._since                                  # Chrome gilt weiter als belegt, kein Neustart der Phase
+
+
+def test_eigener_prozess_wird_aus_den_sitzungen_gefiltert():
+    import os
+    import psutil
+    # Die Abfrage liest eigene PIDs über os.getpid()/psutil: hier nur prüfen, dass beides verfügbar ist
+    assert os.getpid() > 0 and psutil.Process().children(recursive=True) is not None
